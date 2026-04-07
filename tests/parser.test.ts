@@ -16,7 +16,11 @@ describe('Parser', () => {
     expect(ast.id).toBe('test_flow');
     expect(ast.properties.length).toBe(2);
     expect(ast.properties[0].key).toBe('description');
-    expect(ast.properties[0].value).toEqual({ kind: 'literal', value: 'A test workflow', rawType: 'string' });
+    expect(ast.properties[0].value).toEqual({
+      kind: 'literal',
+      value: 'A test workflow',
+      rawType: 'string',
+    });
     expect(ast.properties[1].key).toBe('version');
   });
 
@@ -32,10 +36,10 @@ describe('Parser', () => {
     const ast = parse(source);
     expect(ast.agents.length).toBe(1);
     expect(ast.agents[0].id).toBe('writer');
-    const modeProp = ast.agents[0].properties.find(p => p.key === 'model');
+    const modeProp = ast.agents[0].properties.find((p) => p.key === 'model');
     expect(modeProp).toBeDefined();
 
-    const mpProp = ast.agents[0].properties.find(p => p.key === 'must_produce');
+    const mpProp = ast.agents[0].properties.find((p) => p.key === 'must_produce');
     expect(mpProp).toBeDefined();
     expect(mpProp!.value.kind).toBe('list');
     const list = mpProp!.value as ASTList;
@@ -46,7 +50,7 @@ describe('Parser', () => {
     const source = `workflow test
   done when: review.verdict == "approved"`;
     const ast = parse(source);
-    const doneWhen = ast.properties.find(p => p.key === 'done_when');
+    const doneWhen = ast.properties.find((p) => p.key === 'done_when');
     expect(doneWhen).toBeDefined();
     const cond = doneWhen!.value as ASTCondition;
     expect(cond.kind).toBe('condition');
@@ -58,7 +62,7 @@ describe('Parser', () => {
     const source = `workflow test
   done when: review.confidence >= 0.85`;
     const ast = parse(source);
-    const doneWhen = ast.properties.find(p => p.key === 'done_when');
+    const doneWhen = ast.properties.find((p) => p.key === 'done_when');
     const cond = doneWhen!.value as ASTCondition;
     expect(cond.kind).toBe('condition');
     expect(cond.op).toBe('>=');
@@ -70,7 +74,7 @@ describe('Parser', () => {
     const source = `workflow test
   done when: review.verdict == "approved"`;
     const ast = parse(source);
-    const prop = ast.properties.find(p => p.key === 'done_when');
+    const prop = ast.properties.find((p) => p.key === 'done_when');
     expect(prop).toBeDefined();
     expect(prop!.kind).toBe('property');
     expect(prop!.key).toBe('done_when');
@@ -83,7 +87,7 @@ describe('Parser', () => {
       tools: [dns_lookup, whois_check]`;
     const ast = parse(source);
     const agent = ast.agents[0];
-    const toolsProp = agent.properties.find(p => p.key === 'tools');
+    const toolsProp = agent.properties.find((p) => p.key === 'tools');
     expect(toolsProp).toBeDefined();
     expect(toolsProp!.value.kind).toBe('list');
     const list = toolsProp!.value as ASTList;
@@ -101,11 +105,11 @@ describe('Parser', () => {
     const ast = parse(source);
     const phase = ast.phases[0];
     expect(phase.id).toBe('provision');
-    const retryProp = phase.properties.find(p => p.key === 'retry');
+    const retryProp = phase.properties.find((p) => p.key === 'retry');
     expect(retryProp).toBeDefined();
     expect(retryProp!.value.kind).toBe('block');
     const block = retryProp!.value as ASTBlock;
-    const maxAttempts = block.properties.find(p => p.key === 'max_attempts');
+    const maxAttempts = block.properties.find((p) => p.key === 'max_attempts');
     expect(maxAttempts).toBeDefined();
   });
 
@@ -118,7 +122,7 @@ describe('Parser', () => {
     const ast = parse(source);
     expect(ast.loop).toBeDefined();
     expect(ast.loop!.id).toBe('quality_gate');
-    const phasesProp = ast.loop!.properties.find(p => p.key === 'phases');
+    const phasesProp = ast.loop!.properties.find((p) => p.key === 'phases');
     expect(phasesProp).toBeDefined();
   });
 
@@ -126,7 +130,7 @@ describe('Parser', () => {
     const source = `workflow test
   done when: review.confidence >= 0.85 and review.verdict == "approved"`;
     const ast = parse(source);
-    const doneWhen = ast.properties.find(p => p.key === 'done_when');
+    const doneWhen = ast.properties.find((p) => p.key === 'done_when');
     expect(doneWhen).toBeDefined();
     const cond = doneWhen!.value as ASTCondition;
     expect(cond.kind).toBe('condition');
@@ -143,7 +147,7 @@ describe('Parser', () => {
         - confidence: float`;
     const ast = parse(source);
     const agent = ast.agents[0];
-    const mpProp = agent.properties.find(p => p.key === 'must_produce');
+    const mpProp = agent.properties.find((p) => p.key === 'must_produce');
     expect(mpProp).toBeDefined();
     const list = mpProp!.value as ASTList;
     expect(list.items.length).toBe(2);

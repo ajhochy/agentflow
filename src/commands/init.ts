@@ -1,0 +1,399 @@
+import { writeFileSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { select, input, confirm } from '@inquirer/prompts';
+import chalk from 'chalk';
+import 'dotenv/config';
+
+type OllamaModel = { name: string; size: number };
+type ORModel = { id: string; free: boolean; top: boolean; price: string };
+
+// ── Ollama ───────────────────────────────────────────────────────────
+
+async function detectOllamaModels(): Promise<OllamaModel[]> {
+  try {
+    const res = await fetch('http://localhost:11434/api/tags');
+    if (!res.ok) return [];
+    const data = (await res.json()) as { models: Array<{ name: string; size: number }> };
+    return data.models.map((m) => ({ name: m.name, size: m.size }));
+  } catch {
+    return [];
+  }
+}
+
+function formatSize(bytes: number): string {
+  return `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+function recommendModels(models: OllamaModel[], ramGb: number): { fast: string; smart: string } {
+  const maxBytes = ramGb * 1e9 * 0.55;
+  const fits = models.filter((m) => m.size < maxBytes).sort((a, b) => b.size - a.size);
+  const smart = fits[0]?.name ?? models[0]?.name ?? 'qwen3:8b';
+  const fast = models.filter((m) => m.size < 7e9).sort((a, b) => b.size - a.size)[0]?.name ?? smart;
+  return { fast, smart };
+}
+
+function numCtxFromRam(ramGb: number): number {
+  if (ramGb >= 64) return 16384;
+  if (ramGb >= 32) return 8192;
+  if (ramGb >= 16) return 4096;
+  return 2048;
+}
+
+// ── OpenRouter ───────────────────────────────────────────────────────
+
+const TOP_MODELS = new Set([
+  'google/gemini-2.5-pro',
+  'anthropic/claude-sonnet-4-5',
+  'anthropic/claude-opus-4-5',
+  'openai/gpt-4o',
+  'qwen/qwen3-235b-a22b',
+  'qwen/qwen3-30b-a3b',
+  'qwen/qwen3-plus',
+  'deepseek/deepseek-r2',
+  'deepseek/deepseek-chat-v3-0324',
+  'minimax/minimax-m1',
+  'mistralai/mistral-large-2411',
+  'x-ai/grok-3-beta',
+]);
+
+const STATIC_MODELS: ORModel[] = [
+  { id: 'google/gemini-2.5-pro', free: false, top: true, price: '$1.25/1M' },
+  { id: 'anthropic/claude-sonnet-4-5', free: false, top: true, price: '$3.00/1M' },
+  { id: 'anthropic/claude-opus-4-5', free: false, top: true, price: '$15.0/1M' },
+  { id: 'openai/gpt-4o', free: false, top: true, price: '$2.50/1M' },
+  { id: 'qwen/qwen3-235b-a22b', free: false, top: true, price: '$0.45/1M' },
+  { id: 'qwen/qwen3-30b-a3b', free: false, top: true, price: '$0.08/1M' },
+  { id: 'qwen/qwen3-plus', free: false, top: true, price: '$0.15/1M' },
+  { id: 'deepseek/deepseek-r2', free: false, top: true, price: '$0.55/1M' },
+  { id: 'deepseek/deepseek-chat-v3-0324', free: false, top: true, price: '$0.20/1M' },
+  { id: 'minimax/minimax-m1', free: false, top: true, price: '$0.40/1M' },
+  { id: 'mistralai/mistral-large-2411', free: false, top: true, price: '$2.00/1M' },
+  { id: 'x-ai/grok-3-beta', free: false, top: true, price: '$3.00/1M' },
+  { id: 'meta-llama/llama-3.3-8b-instruct:free', free: true, top: false, price: 'free' },
+  { id: 'qwen/qwen3-8b:free', free: true, top: false, price: 'free' },
+  { id: 'deepseek/deepseek-r1:free', free: true, top: false, price: 'free' },
+  { id: 'google/gemma-3-27b-it:free', free: true, top: false, price: 'free' },
+  { id: 'mistralai/mistral-7b-instruct:free', free: true, top: false, price: 'free' },
+];
+
+async function fetchOpenRouterModels(apiKey?: string): Promise<ORModel[]> {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+    const res = await fetch('https://openrouter.ai/api/v1/models', { headers });
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as {
+      data: Array<{ id: string; pricing: { prompt: string }; name?: string }>;
+    };
+
+    return data.data
+      .map((m) => {
+        const pricePerToken = parseFloat(m.pricing.prompt);
+        const free = pricePerToken === 0 || isNaN(pricePerToken);
+        const pricePer1M = free ? 'free' : `$${(pricePerToken * 1_000_000).toFixed(2)}/1M`;
+        return { id: m.id, free, top: TOP_MODELS.has(m.id), price: pricePer1M };
+      })
+      .sort((a, b) => {
+        if (a.top && !b.top) return -1;
+        if (!a.top && b.top) return 1;
+        if (a.free && !b.free) return 1;
+        if (!a.free && b.free) return -1;
+        return a.id.localeCompare(b.id);
+      });
+  } catch {
+    return [];
+  }
+}
+
+function buildModelChoices(models: ORModel[], defaultId: string) {
+  const topModels = models.filter((m) => m.top);
+  const freeModels = models.filter((m) => m.free && !m.top);
+  const otherModels = models.filter((m) => !m.top && !m.free);
+
+  const toChoice = (m: ORModel) => ({
+    name: `${m.id.padEnd(55)} ${m.free ? chalk.green('free') : chalk.dim(m.price)}`,
+    value: m.id,
+    short: m.id,
+  });
+
+  return [
+    {
+      name: chalk.bold('── 🧠 Frontier ──────────────────────────'),
+      value: '__sep1__',
+      disabled: true,
+    },
+    ...topModels.map(toChoice),
+    {
+      name: chalk.bold('── 🆓 Gratuiti ──────────────────────────'),
+      value: '__sep2__',
+      disabled: true,
+    },
+    ...freeModels.map(toChoice),
+    {
+      name: chalk.bold('── 📦 Altri ─────────────────────────────'),
+      value: '__sep3__',
+      disabled: true,
+    },
+    ...otherModels.slice(0, 50).map(toChoice),
+    {
+      name: chalk.dim('── digita manualmente ───────────────────'),
+      value: '__custom__',
+      short: 'custom',
+    },
+  ].filter((c) =>
+    !('disabled' in c) || topModels.length + freeModels.length + otherModels.length > 0
+      ? true
+      : false,
+  );
+}
+
+// ── .env helper ──────────────────────────────────────────────────────
+
+function writeEnvKey(key: string, value: string): void {
+  const envLine = `${key}=${value}\n`;
+  if (existsSync('.env')) {
+    const current = readFileSync('.env', 'utf-8');
+    if (!current.includes(key)) appendFileSync('.env', envLine);
+  } else {
+    writeFileSync('.env', envLine);
+  }
+}
+
+// ── Main ─────────────────────────────────────────────────────────────
+
+export async function runInit(): Promise<void> {
+  // Carica le variabili dal .env esistente prima di tutto
+  if (existsSync('.env')) {
+    const envContent = readFileSync('.env', 'utf-8');
+    for (const line of envContent.split('\n')) {
+      const match = line.match(/^([^=]+)=(.*)$/);
+      if (match && !process.env[match[1]]) {
+        process.env[match[1]] = match[2].trim();
+      }
+    }
+  }
+
+  console.log(chalk.bold('\n🤖 AgentFlow — Setup iniziale\n'));
+
+  // ── 1. Rileva Ollama ─────────────────────────────────────────────
+  process.stdout.write(chalk.dim('⠋ Rilevamento modelli Ollama...'));
+  const ollamaModels = await detectOllamaModels();
+  process.stdout.write('\r' + ' '.repeat(50) + '\r');
+
+  if (ollamaModels.length === 0) {
+    console.log(chalk.yellow('⚠️  Ollama non trovato o nessun modello installato.'));
+    console.log(chalk.dim('   → https://ollama.com  →  ollama pull qwen3:8b\n'));
+  } else {
+    console.log(chalk.green(`✅ Trovati ${ollamaModels.length} modelli Ollama:`));
+    for (const m of ollamaModels) {
+      console.log(`   • ${m.name.padEnd(28)} ${formatSize(m.size)}`);
+    }
+    console.log();
+  }
+
+  // ── 2. Provider ──────────────────────────────────────────────────
+  const provider = await select({
+    message: 'Provider default?',
+    choices: [
+      { name: 'ollama       — locale, gratuito', value: 'ollama' },
+      { name: 'openrouter   — cloud, accesso a tutti i modelli', value: 'openrouter' },
+      { name: 'claude       — Anthropic diretto', value: 'claude' },
+      { name: 'auto         — cloud se API key presente, altrimenti Ollama', value: 'auto' },
+    ],
+  });
+
+  // ── 3. API Keys ──────────────────────────────────────────────────
+  let anthropicKey = process.env.ANTHROPIC_API_KEY ?? '';
+  let openrouterKey = process.env.OPENROUTER_API_KEY ?? '';
+
+  if (provider === 'claude' || provider === 'auto') {
+    const existing = anthropicKey;
+    const masked = existing ? `${existing.slice(0, 8)}...` : undefined;
+    if (masked) console.log(chalk.dim(`   Key esistente: ${masked}`));
+    const k = await input({ message: 'ANTHROPIC_API_KEY', default: existing || undefined });
+    if (k) anthropicKey = k;
+  }
+
+  if (provider === 'openrouter' || provider === 'auto') {
+    const existing = openrouterKey;
+    const masked = existing ? `${existing.slice(0, 8)}...` : undefined;
+    if (masked) console.log(chalk.dim(`   Key esistente: ${masked}`));
+    const k = await input({
+      message: 'OPENROUTER_API_KEY (https://openrouter.ai/keys)',
+      default: existing || undefined,
+    });
+    if (k) openrouterKey = k;
+  }
+
+  // ── 4. RAM ───────────────────────────────────────────────────────
+  const ramStr = await select({
+    message: 'RAM disponibile?',
+    choices: [
+      { name: '8 GB', value: '8' },
+      { name: '16 GB', value: '16' },
+      { name: '32 GB', value: '32' },
+      { name: '64 GB', value: '64' },
+    ],
+    default: '16',
+  });
+  const ramGb = parseInt(ramStr);
+  const numCtx = numCtxFromRam(ramGb);
+
+  // ── 5. Modelli Ollama ────────────────────────────────────────────
+  const { fast: ollamaFastDefault, smart: ollamaSmartDefault } = recommendModels(
+    ollamaModels,
+    ramGb,
+  );
+
+  let ollamaSmartModel = ollamaSmartDefault;
+  let ollamaFastModel = ollamaFastDefault;
+
+  if (ollamaModels.length > 0) {
+    const ollamaChoices = [
+      ...ollamaModels.map((m) => ({
+        name: `${m.name.padEnd(30)} ${formatSize(m.size)}`,
+        value: m.name,
+        short: m.name,
+      })),
+      { name: chalk.dim('digita manualmente'), value: '__custom__', short: 'custom' },
+    ];
+
+    const smartSel = await select({
+      message: 'Modello Ollama smart?',
+      choices: ollamaChoices,
+      default: ollamaSmartDefault,
+    });
+    if (smartSel === '__custom__') {
+      ollamaSmartModel = await input({ message: 'Modello Ollama smart (es. qwen3:14b)' });
+    } else {
+      ollamaSmartModel = smartSel;
+    }
+
+    const fastSel = await select({
+      message: 'Modello Ollama fast?',
+      choices: ollamaChoices,
+      default: ollamaFastDefault,
+    });
+    if (fastSel === '__custom__') {
+      ollamaFastModel = await input({ message: 'Modello Ollama fast (es. qwen3:8b)' });
+    } else {
+      ollamaFastModel = fastSel;
+    }
+  }
+
+  // ── 6. Modelli OpenRouter ────────────────────────────────────────
+  let orSmartModel = 'google/gemini-2.5-pro';
+  let orFreeModel = 'meta-llama/llama-3.3-8b-instruct:free';
+
+  if (provider === 'openrouter' || openrouterKey) {
+    process.stdout.write(chalk.dim('⠋ Caricamento modelli OpenRouter...'));
+    const orModels = await fetchOpenRouterModels(openrouterKey);
+    process.stdout.write('\r' + ' '.repeat(50) + '\r');
+
+    const list = orModels.length > 0 ? orModels : STATIC_MODELS;
+    console.log(chalk.green(`✅ ${list.length} modelli OpenRouter disponibili\n`));
+
+    const smartChoices = buildModelChoices(list, orSmartModel);
+
+    const smartSel = await select({
+      message: 'Modello OpenRouter smart?',
+      choices: smartChoices,
+      pageSize: 20,
+    });
+    if (smartSel === '__custom__') {
+      orSmartModel = await input({ message: 'ID modello (es. qwen/qwen3-235b-a22b)' });
+    } else {
+      orSmartModel = smartSel;
+    }
+
+    const freeSel = await select({
+      message: 'Modello OpenRouter free/fast?',
+      choices: smartChoices,
+      pageSize: 20,
+      default: orFreeModel,
+    });
+    if (freeSel === '__custom__') {
+      orFreeModel = await input({ message: 'ID modello (es. qwen/qwen3-8b:free)' });
+    } else {
+      orFreeModel = freeSel;
+    }
+  }
+
+  // ── 7. Conferma ──────────────────────────────────────────────────
+  console.log(chalk.bold('\nRiepilogo configurazione:'));
+  console.log(`   Provider         → ${chalk.cyan(provider)}`);
+  console.log(`   Ollama smart     → ${chalk.cyan(ollamaSmartModel)}  (num_ctx: ${numCtx})`);
+  console.log(`   Ollama fast      → ${chalk.cyan(ollamaFastModel)}`);
+  if (provider === 'openrouter' || openrouterKey) {
+    console.log(`   OpenRouter smart → ${chalk.cyan(orSmartModel)}`);
+    console.log(`   OpenRouter free  → ${chalk.cyan(orFreeModel)}`);
+  }
+  console.log();
+
+  const ok = await confirm({ message: 'Confermi?', default: true });
+  if (!ok) {
+    console.log(chalk.yellow('\nSetup annullato.'));
+    return;
+  }
+
+  // ── 8. Scrivi config ─────────────────────────────────────────────
+  const config = {
+    models: {
+      auto: {
+        provider,
+        model: provider === 'openrouter' ? orSmartModel : ollamaSmartModel,
+      },
+      'local-fast': {
+        provider: 'ollama',
+        model: ollamaFastModel,
+        options: { num_ctx: numCtx, think: false, keep_alive: '10m' },
+      },
+      'local-smart': {
+        provider: 'ollama',
+        model: ollamaSmartModel,
+        options: { num_ctx: numCtx, think: false, keep_alive: '10m' },
+      },
+      'openrouter-smart': { provider: 'openrouter', model: orSmartModel },
+      'openrouter-free': { provider: 'openrouter', model: orFreeModel },
+      'claude-sonnet': { provider: 'claude', model: 'claude-sonnet-4-5' },
+      'claude-opus': { provider: 'claude', model: 'claude-opus-4-5' },
+    },
+    defaults: {
+      provider,
+      ollama_base_url: 'http://localhost:11434',
+      ollama_keep_alive: '10m',
+      timeout_ms: 300000,
+      num_ctx: numCtx,
+    },
+  };
+
+  writeFileSync('agentflow.config.json', JSON.stringify(config, null, 2));
+  console.log(chalk.green('\n✅ agentflow.config.json salvato'));
+
+  // ── 9. .env ──────────────────────────────────────────────────────
+  let envUpdated = false;
+  if (anthropicKey) {
+    writeEnvKey('ANTHROPIC_API_KEY', anthropicKey);
+    envUpdated = true;
+  }
+  if (openrouterKey) {
+    writeEnvKey('OPENROUTER_API_KEY', openrouterKey);
+    envUpdated = true;
+  }
+  if (envUpdated) console.log(chalk.green('✅ .env aggiornato'));
+
+  // ── 10. .gitignore ────────────────────────────────────────────────
+  if (existsSync('.gitignore')) {
+    const gi = readFileSync('.gitignore', 'utf-8');
+    if (!gi.includes('.env')) appendFileSync('.gitignore', '\n.env\n');
+  } else {
+    writeFileSync('.gitignore', '.env\noutput/\n*.state.json\n');
+  }
+  console.log(chalk.green('✅ .gitignore aggiornato'));
+
+  console.log(chalk.bold('\n🚀 Pronto! Prova:'));
+  console.log(
+    chalk.cyan(`   npx tsx src/cli.ts run examples/code-quality.aflow --input 'task="test"'\n`),
+  );
+}

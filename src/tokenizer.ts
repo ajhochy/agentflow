@@ -1,18 +1,76 @@
 import type { Token, TokenKind } from './types.js';
 
 const KEYWORDS = new Set([
-  'workflow', 'agent', 'phase', 'loop', 'agents', 'phases', 'trigger', 'context',
-  'environment', 'when', 'mode', 'model', 'tools', 'must_produce', 'processes',
-  'parallel', 'inject_context', 'fail_fast', 'constraint', 'rule', 'input',
-  'output', 'type', 'on_fail', 'rollback_on_fail', 'poll', 'retry', 'timeout',
-  'on_max_wait_exceeded', 'on_all_failed', 'on_timeout', 'on_max_exceeded',
-  'on_each_iteration', 'on_success', 'repeat_while', 'max_iterations', 'done',
-  'done_when', 'escalate_to', 'notify', 'notify_user', 'rollback', 'description',
-  'version', 'interval', 'backoff', 'max_wait', 'condition', 'max_attempts',
-  'delete_files', 'undo', 'send_to', 'payload', 'message', 'attach', 'action',
-  'priority', 'then', 'reschedule', 'instruction_to_user', 'data', 'format',
-  'completes_when', 'filter', 'event', 'to', 'priority_order', 'log_to',
-  'on_event', 'input_schema',
+  'workflow',
+  'agent',
+  'phase',
+  'loop',
+  'agents',
+  'phases',
+  'trigger',
+  'context',
+  'environment',
+  'when',
+  'mode',
+  'model',
+  'tools',
+  'must_produce',
+  'processes',
+  'parallel',
+  'inject_context',
+  'fail_fast',
+  'constraint',
+  'rule',
+  'input',
+  'output',
+  'type',
+  'on_fail',
+  'rollback_on_fail',
+  'poll',
+  'retry',
+  'timeout',
+  'on_max_wait_exceeded',
+  'on_all_failed',
+  'on_timeout',
+  'on_max_exceeded',
+  'on_each_iteration',
+  'on_success',
+  'repeat_while',
+  'max_iterations',
+  'done',
+  'done_when',
+  'escalate_to',
+  'notify',
+  'notify_user',
+  'rollback',
+  'description',
+  'version',
+  'interval',
+  'backoff',
+  'max_wait',
+  'condition',
+  'max_attempts',
+  'delete_files',
+  'undo',
+  'send_to',
+  'payload',
+  'message',
+  'attach',
+  'action',
+  'priority',
+  'then',
+  'reschedule',
+  'instruction_to_user',
+  'data',
+  'format',
+  'completes_when',
+  'filter',
+  'event',
+  'to',
+  'priority_order',
+  'log_to',
+  'on_event',
+  'input_schema',
 ]);
 
 const OPERATORS = ['==', '!=', '>=', '<=', '>', '<'];
@@ -51,7 +109,11 @@ export function tokenize(source: string): Token[] {
     } else if (tokens.length > 0) {
       // Same level — emit NEWLINE to separate statements
       const lastToken = tokens[tokens.length - 1];
-      if (lastToken.kind !== 'INDENT' && lastToken.kind !== 'DEDENT' && lastToken.kind !== 'NEWLINE') {
+      if (
+        lastToken.kind !== 'INDENT' &&
+        lastToken.kind !== 'DEDENT' &&
+        lastToken.kind !== 'NEWLINE'
+      ) {
         tokens.push({ kind: 'NEWLINE', value: '', line: lineNum, col: 1 });
       }
     }
@@ -81,10 +143,19 @@ export function tokenize(source: string): Token[] {
         while (col < line.length && line[col] !== '"') {
           if (line[col] === '\\' && col + 1 < line.length) {
             const next = line[col + 1];
-            if (next === '"') { str += '"'; col += 2; }
-            else if (next === '\\') { str += '\\'; col += 2; }
-            else if (next === 'n') { str += '\n'; col += 2; }
-            else { str += line[col]; col++; }
+            if (next === '"') {
+              str += '"';
+              col += 2;
+            } else if (next === '\\') {
+              str += '\\';
+              col += 2;
+            } else if (next === 'n') {
+              str += '\n';
+              col += 2;
+            } else {
+              str += line[col];
+              col++;
+            }
           } else {
             str += line[col];
             col++;
@@ -113,7 +184,12 @@ export function tokenize(source: string): Token[] {
           }
           if (suffix === 's' || suffix === 'min' || suffix === 'h' || suffix === 'd') {
             // Emit as a single IDENTIFIER token representing a duration: "30s", "5min", etc.
-            tokens.push({ kind: 'IDENTIFIER', value: num + suffix, line: lineNum, col: startCol + 1 });
+            tokens.push({
+              kind: 'IDENTIFIER',
+              value: num + suffix,
+              line: lineNum,
+              col: startCol + 1,
+            });
           } else {
             // Not a duration — emit number and identifier separately
             tokens.push({ kind: 'NUMBER', value: num, line: lineNum, col: startCol + 1 });
@@ -127,7 +203,12 @@ export function tokenize(source: string): Token[] {
             } else if (KEYWORDS.has(suffix)) {
               tokens.push({ kind: 'KEYWORD', value: suffix, line: lineNum, col: suffixStart + 1 });
             } else {
-              tokens.push({ kind: 'IDENTIFIER', value: suffix, line: lineNum, col: suffixStart + 1 });
+              tokens.push({
+                kind: 'IDENTIFIER',
+                value: suffix,
+                line: lineNum,
+                col: suffixStart + 1,
+              });
             }
           }
         } else {
@@ -137,7 +218,11 @@ export function tokenize(source: string): Token[] {
       }
 
       // Operators (two-char first)
-      if ((ch === '=' || ch === '!' || ch === '>' || ch === '<') && col + 1 < line.length && line[col + 1] === '=') {
+      if (
+        (ch === '=' || ch === '!' || ch === '>' || ch === '<') &&
+        col + 1 < line.length &&
+        line[col + 1] === '='
+      ) {
         const op = ch + '=';
         tokens.push({ kind: 'OPERATOR', value: op, line: lineNum, col: col + 1 });
         col += 2;
@@ -150,13 +235,41 @@ export function tokenize(source: string): Token[] {
       }
 
       // Symbols
-      if (ch === ':') { tokens.push({ kind: 'COLON', value: ':', line: lineNum, col: col + 1 }); col++; continue; }
-      if (ch === '[') { tokens.push({ kind: 'LBRACKET', value: '[', line: lineNum, col: col + 1 }); col++; continue; }
-      if (ch === ']') { tokens.push({ kind: 'RBRACKET', value: ']', line: lineNum, col: col + 1 }); col++; continue; }
-      if (ch === '.') { tokens.push({ kind: 'DOT', value: '.', line: lineNum, col: col + 1 }); col++; continue; }
-      if (ch === '|') { tokens.push({ kind: 'PIPE', value: '|', line: lineNum, col: col + 1 }); col++; continue; }
-      if (ch === ',') { tokens.push({ kind: 'COMMA', value: ',', line: lineNum, col: col + 1 }); col++; continue; }
-      if (ch === '-') { tokens.push({ kind: 'DASH', value: '-', line: lineNum, col: col + 1 }); col++; continue; }
+      if (ch === ':') {
+        tokens.push({ kind: 'COLON', value: ':', line: lineNum, col: col + 1 });
+        col++;
+        continue;
+      }
+      if (ch === '[') {
+        tokens.push({ kind: 'LBRACKET', value: '[', line: lineNum, col: col + 1 });
+        col++;
+        continue;
+      }
+      if (ch === ']') {
+        tokens.push({ kind: 'RBRACKET', value: ']', line: lineNum, col: col + 1 });
+        col++;
+        continue;
+      }
+      if (ch === '.') {
+        tokens.push({ kind: 'DOT', value: '.', line: lineNum, col: col + 1 });
+        col++;
+        continue;
+      }
+      if (ch === '|') {
+        tokens.push({ kind: 'PIPE', value: '|', line: lineNum, col: col + 1 });
+        col++;
+        continue;
+      }
+      if (ch === ',') {
+        tokens.push({ kind: 'COMMA', value: ',', line: lineNum, col: col + 1 });
+        col++;
+        continue;
+      }
+      if (ch === '-') {
+        tokens.push({ kind: 'DASH', value: '-', line: lineNum, col: col + 1 });
+        col++;
+        continue;
+      }
 
       // Identifiers and keywords
       if (isIdentStart(ch)) {
@@ -174,9 +287,18 @@ export function tokenize(source: string): Token[] {
         }
 
         // Logical operators
-        if (ident === 'and') { tokens.push({ kind: 'AND', value: 'and', line: lineNum, col: startCol + 1 }); continue; }
-        if (ident === 'or') { tokens.push({ kind: 'OR', value: 'or', line: lineNum, col: startCol + 1 }); continue; }
-        if (ident === 'not') { tokens.push({ kind: 'NOT', value: 'not', line: lineNum, col: startCol + 1 }); continue; }
+        if (ident === 'and') {
+          tokens.push({ kind: 'AND', value: 'and', line: lineNum, col: startCol + 1 });
+          continue;
+        }
+        if (ident === 'or') {
+          tokens.push({ kind: 'OR', value: 'or', line: lineNum, col: startCol + 1 });
+          continue;
+        }
+        if (ident === 'not') {
+          tokens.push({ kind: 'NOT', value: 'not', line: lineNum, col: startCol + 1 });
+          continue;
+        }
 
         // Keywords
         if (KEYWORDS.has(ident)) {

@@ -38,7 +38,7 @@ describe('Compiler', () => {
     const ir = compileSource(source);
     const agent = ir.workflow.agents['critic'];
     expect(agent.must_produce).toBeDefined();
-    const confidenceItem = agent.must_produce!.find(m => m.name === 'confidence');
+    const confidenceItem = agent.must_produce!.find((m) => m.name === 'confidence');
     expect(confidenceItem).toBeDefined();
     expect(confidenceItem!.type).toBe('float');
   });

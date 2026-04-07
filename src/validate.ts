@@ -21,7 +21,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
   for (const phase of phases) {
     if (phase.output && phase.agent && agents[phase.agent]) {
       const agent = agents[phase.agent];
-      const produces = new Set(agent.must_produce?.map(m => m.name) ?? []);
+      const produces = new Set(agent.must_produce?.map((m) => m.name) ?? []);
       for (const out of phase.output) {
         if (!produces.has(out)) {
           errors.push({
@@ -37,7 +37,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
 
   // S3: ogni fase citata in loop.phases deve esistere in phases
   if (loop) {
-    const phaseIds = new Set(phases.map(p => p.id));
+    const phaseIds = new Set(phases.map((p) => p.id));
     for (const loopPhaseId of loop.phases) {
       if (!phaseIds.has(loopPhaseId)) {
         errors.push({
@@ -72,7 +72,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
   // S6: must_produce['confidence'] deve essere tipo float
   for (const [agentId, agent] of Object.entries(agents)) {
     if (agent.must_produce) {
-      const confidenceItem = agent.must_produce.find(m => m.name === 'confidence');
+      const confidenceItem = agent.must_produce.find((m) => m.name === 'confidence');
       if (confidenceItem && confidenceItem.type && confidenceItem.type !== 'float') {
         errors.push({
           rule: 'S6',

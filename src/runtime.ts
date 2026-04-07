@@ -2,9 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
-  WorkflowIR, AgentDef, PhaseDef, Condition, ValueExpr,
-  WorkflowInstance, PhaseState, WorkflowState,
+  WorkflowIR,
+  AgentDef,
+  PhaseDef,
+  Condition,
+  ValueExpr,
+  WorkflowInstance,
+  PhaseState,
+  WorkflowState,
 } from './types.js';
+import { logger } from './logger.js';
 
 // ─── Execution Context ─────────────────────────────────────────────
 
@@ -20,8 +27,15 @@ export type ExecutionContext = {
 // ─── Agent Executor Interface ───────────────────────────────────────
 
 export interface AgentExecutor {
-  execute(agent: AgentDef, input: Record<string, unknown>, context?: ExecutionContext): Promise<Record<string, unknown>>;
+  execute(
+    agent: AgentDef,
+    input: Record<string, unknown>,
+    context?: ExecutionContext,
+  ): Promise<Record<string, unknown>>;
 }
+
+// Factory che risolve l'executor giusto per ogni agente (in base al suo model)
+export type ExecutorResolver = (agent: AgentDef) => AgentExecutor;
 
 // ─── Mock Agent Executor ────────────────────────────────────────────
 
@@ -32,7 +46,10 @@ export class MockAgentExecutor implements AgentExecutor {
     this.iterationCount = n;
   }
 
-  async execute(agent: AgentDef, _input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async execute(
+    agent: AgentDef,
+    _input: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     const output: Record<string, unknown> = {};
 
     if (agent.must_produce) {
@@ -52,14 +69,22 @@ export class MockAgentExecutor implements AgentExecutor {
 
   private mockValue(type?: string): unknown {
     switch (type) {
-      case 'bool': return true;
-      case 'float': return 0.9;
-      case 'int': return 42;
-      case 'datetime': return new Date().toISOString();
-      case 'date': return new Date().toISOString().split('T')[0];
-      case 'array': return [];
-      case 'object': return {};
-      default: return 'mock_value';
+      case 'bool':
+        return true;
+      case 'float':
+        return 0.9;
+      case 'int':
+        return 42;
+      case 'datetime':
+        return new Date().toISOString();
+      case 'date':
+        return new Date().toISOString().split('T')[0];
+      case 'array':
+        return [];
+      case 'object':
+        return {};
+      default:
+        return 'mock_value';
     }
   }
 }
@@ -68,13 +93,28 @@ export class MockAgentExecutor implements AgentExecutor {
 
 export class WorkflowRunner {
   private ir: WorkflowIR;
-  private executor: AgentExecutor;
+  private resolveExecutor: ExecutorResolver;
   private outputDir?: string;
+  private aborted = false;
 
-  constructor(ir: WorkflowIR, executor: AgentExecutor, options?: { outputDir?: string }) {
+  constructor(
+    ir: WorkflowIR,
+    executor: AgentExecutor | ExecutorResolver,
+    options?: { outputDir?: string },
+  ) {
     this.ir = ir;
-    this.executor = executor;
+    this.resolveExecutor = typeof executor === 'function' ? executor : () => executor;
     this.outputDir = options?.outputDir;
+  }
+
+  /** Register signal handlers for graceful shutdown. Call once before run(). */
+  enableGracefulShutdown(): void {
+    const handler = () => {
+      logger.warn('Shutdown signal received — completing current phase then stopping');
+      this.aborted = true;
+    };
+    process.once('SIGINT', handler);
+    process.once('SIGTERM', handler);
   }
 
   async run(triggerInput: Record<string, unknown>): Promise<WorkflowInstance> {
@@ -87,7 +127,7 @@ export class WorkflowRunner {
 
     if (instance.workflow_id !== this.ir.workflow.id) {
       throw new Error(
-        `workflow_id mismatch: state has "${instance.workflow_id}", IR has "${this.ir.workflow.id}"`
+        `workflow_id mismatch: state has "${instance.workflow_id}", IR has "${this.ir.workflow.id}"`,
       );
     }
     if (instance.state === 'completed') {
@@ -127,12 +167,13 @@ export class WorkflowRunner {
 
       // Execute non-loop phases that come before loop phases
       for (const phase of this.ir.workflow.phases) {
+        if (this.aborted) break;
         if (loopPhaseIds.has(phase.id)) continue;
         if (instance.phase_states[phase.id] === 'completed') continue;
 
         const phaseIdx = this.ir.workflow.phases.indexOf(phase);
         const firstLoopPhaseIdx = loop
-          ? this.ir.workflow.phases.findIndex(p => loopPhaseIds.has(p.id))
+          ? this.ir.workflow.phases.findIndex((p) => loopPhaseIds.has(p.id))
           : -1;
 
         if (firstLoopPhaseIdx === -1 || phaseIdx < firstLoopPhaseIdx) {
@@ -141,15 +182,22 @@ export class WorkflowRunner {
       }
 
       // Execute loop if present
-      if (loop) {
+      if (loop && !this.aborted) {
         await this.executeLoop(loop, instance);
       }
 
       // Execute non-loop phases that come after loop phases
       for (const phase of this.ir.workflow.phases) {
+        if (this.aborted) break;
         if (loopPhaseIds.has(phase.id)) continue;
         if (instance.phase_states[phase.id] === 'completed') continue;
         await this.executePhase(phase, instance);
+      }
+
+      if (this.aborted) {
+        instance.state = 'paused';
+        logger.info(`Workflow paused — can be resumed with instance ID ${instance.instance_id}`);
+        return instance;
       }
 
       // Evaluate done_when
@@ -174,7 +222,11 @@ export class WorkflowRunner {
     return instance;
   }
 
-  private async executePhase(phase: PhaseDef, instance: WorkflowInstance, context?: ExecutionContext): Promise<void> {
+  private async executePhase(
+    phase: PhaseDef,
+    instance: WorkflowInstance,
+    context?: ExecutionContext,
+  ): Promise<void> {
     const agent = this.ir.workflow.agents[phase.agent];
     if (!agent) {
       throw new Error(`Agent "${phase.agent}" not found for phase "${phase.id}"`);
@@ -187,26 +239,31 @@ export class WorkflowRunner {
 
     // Log feedback se presente
     if (input['feedback']) {
-      process.stderr.write(`  📨 [${phase.agent}] Feedback ricevuto: ${JSON.stringify(input['feedback']).slice(0, 100)}\n`);
+      logger.info(
+        `[${phase.agent}] Feedback ricevuto: ${JSON.stringify(input['feedback']).slice(0, 100)}`,
+      );
     }
 
     // Resolve inject_context: read referenced file and attach to execution context
     const resolvedContext = this.resolveInjectedContext(agent.inject_context, context);
 
+    // Risolvi l'executor giusto per questo agente (in base al suo model)
+    const executor = this.resolveExecutor(agent);
+
     // Execute agent
-    const output = await this.executor.execute(agent, input, resolvedContext);
+    const output = await executor.execute(agent, input, resolvedContext);
 
     // Verify must_produce
     if (agent.must_produce) {
       const missing = agent.must_produce
-        .filter(item => !(item.name in output))
-        .map(item => item.name);
+        .filter((item) => !(item.name in output))
+        .map((item) => item.name);
 
       if (missing.length > 0) {
         instance.phase_states[phase.id] = 'failed';
         this.saveState(instance);
         throw new Error(
-          `missing_output: Agent "${agent.id}" in phase "${phase.id}" did not produce: ${missing.join(', ')}`
+          `missing_output: Agent "${agent.id}" in phase "${phase.id}" did not produce: ${missing.join(', ')}`,
         );
       }
     }
@@ -218,7 +275,10 @@ export class WorkflowRunner {
     this.writePhaseOutput(phase.id, output);
   }
 
-  private async executeLoop(loop: import('./types.js').LoopDef, instance: WorkflowInstance): Promise<void> {
+  private async executeLoop(
+    loop: import('./types.js').LoopDef,
+    instance: WorkflowInstance,
+  ): Promise<void> {
     const maxIter = loop.max_iterations ?? Infinity;
     const startIteration = instance.loop_iterations[loop.id] ?? 0;
     let iteration = startIteration > 0 ? startIteration - 1 : 0;
@@ -226,16 +286,22 @@ export class WorkflowRunner {
 
     // Get ordered loop phases
     const loopPhases = loop.phases
-      .map(id => this.ir.workflow.phases.find(p => p.id === id))
+      .map((id) => this.ir.workflow.phases.find((p) => p.id === id))
       .filter((p): p is PhaseDef => p !== undefined);
 
     do {
+      if (this.aborted) break;
       iteration++;
       instance.loop_iterations[loop.id] = iteration;
 
       // Set iteration on mock executor if applicable
-      if (this.executor instanceof MockAgentExecutor) {
-        (this.executor as MockAgentExecutor).setIteration(iteration);
+      // Prova con il primo agente del loop per controllare se è un MockAgentExecutor
+      const firstLoopAgent = this.ir.workflow.agents[loopPhases[0]?.agent];
+      if (firstLoopAgent) {
+        const testExecutor = this.resolveExecutor(firstLoopAgent);
+        if (testExecutor instanceof MockAgentExecutor) {
+          testExecutor.setIteration(iteration);
+        }
       }
 
       // Execute each phase in the loop
@@ -247,12 +313,16 @@ export class WorkflowRunner {
         instance.phase_states[phase.id] = 'pending';
 
         // Inietta il feedback del loop come input extra
-        if (iteration > 1 && loop.on_each_iteration && phase.agent === loop.on_each_iteration.send_to) {
+        if (
+          iteration > 1 &&
+          loop.on_each_iteration &&
+          phase.agent === loop.on_each_iteration.send_to
+        ) {
           const payloadRef = loop.on_each_iteration.payload;
           if (payloadRef) {
             const feedbackValue = this.resolveValue(
               { kind: 'ref', path: payloadRef } as ValueExpr,
-              instance
+              instance,
             );
             if (!instance.loop_feedback) instance.loop_feedback = {};
             instance.loop_feedback[phase.id] = feedbackValue;
@@ -266,7 +336,7 @@ export class WorkflowRunner {
             acceptance_criteria: this.ir.workflow.done_when
               ? this.conditionToText(this.ir.workflow.done_when)
               : undefined,
-          }
+          },
         };
         await this.executePhase(phase, instance, loopContext);
       }
@@ -275,7 +345,9 @@ export class WorkflowRunner {
       if (this.ir.workflow.done_when) {
         const doneEarly = this.evaluateCondition(this.ir.workflow.done_when, instance);
         if (doneEarly) {
-          process.stderr.write(`  ✅ [loop:${loop.id}] done_when satisfied at iteration ${iteration} — exiting early\n`);
+          logger.info(
+            `[loop:${loop.id}] done_when satisfied at iteration ${iteration} — exiting early`,
+          );
           break;
         }
       }
@@ -292,8 +364,8 @@ export class WorkflowRunner {
         if (loop.on_max_exceeded) {
           console.error(
             `[loop:${loop.id}] Max iterations (${maxIter}) exceeded. ` +
-            `Escalating to: ${loop.on_max_exceeded.escalate_to ?? 'unknown'}. ` +
-            `Message: ${loop.on_max_exceeded.message ?? ''}`
+              `Escalating to: ${loop.on_max_exceeded.escalate_to ?? 'unknown'}. ` +
+              `Message: ${loop.on_max_exceeded.message ?? ''}`,
           );
         }
         break;
@@ -301,7 +373,11 @@ export class WorkflowRunner {
     } while (true);
   }
 
-  private resolveInputs(inputRefs: string[], instance: WorkflowInstance, phaseId?: string): Record<string, unknown> {
+  private resolveInputs(
+    inputRefs: string[],
+    instance: WorkflowInstance,
+    phaseId?: string,
+  ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
 
     for (const ref of inputRefs) {
@@ -338,19 +414,26 @@ export class WorkflowRunner {
         const right = this.resolveValue(condition.right, instance);
 
         switch (condition.op) {
-          case '==': return left === right;
-          case '!=': return left !== right;
-          case '>': return Number(left) > Number(right);
-          case '<': return Number(left) < Number(right);
-          case '>=': return Number(left) >= Number(right);
-          case '<=': return Number(left) <= Number(right);
-          default: return false;
+          case '==':
+            return left === right;
+          case '!=':
+            return left !== right;
+          case '>':
+            return Number(left) > Number(right);
+          case '<':
+            return Number(left) < Number(right);
+          case '>=':
+            return Number(left) >= Number(right);
+          case '<=':
+            return Number(left) <= Number(right);
+          default:
+            return false;
         }
       }
       case 'and':
-        return condition.conditions.every(c => this.evaluateCondition(c, instance));
+        return condition.conditions.every((c) => this.evaluateCondition(c, instance));
       case 'or':
-        return condition.conditions.some(c => this.evaluateCondition(c, instance));
+        return condition.conditions.some((c) => this.evaluateCondition(c, instance));
       case 'not':
         return !this.evaluateCondition(condition.condition, instance);
       default:
@@ -404,17 +487,11 @@ export class WorkflowRunner {
       mkdirSync(this.outputDir, { recursive: true });
 
       // Write full phase output as JSON
-      writeFileSync(
-        join(this.outputDir, `${phaseId}.json`),
-        JSON.stringify(output, null, 2)
-      );
+      writeFileSync(join(this.outputDir, `${phaseId}.json`), JSON.stringify(output, null, 2));
 
       // Extract code fields as standalone files
       if (typeof output['code'] === 'string') {
-        writeFileSync(
-          join(this.outputDir, `${phaseId}.code.ts`),
-          output['code']
-        );
+        writeFileSync(join(this.outputDir, `${phaseId}.code.ts`), output['code']);
       }
     } catch {
       // Non-critical — don't break workflow for output persistence
@@ -431,29 +508,29 @@ export class WorkflowRunner {
         state: instance.state,
         started_at: instance.started_at,
         completed_at: instance.completed_at,
-        phases: Object.keys(instance.phase_states).map(id => ({
+        phases: Object.keys(instance.phase_states).map((id) => ({
           id,
           state: instance.phase_states[id],
           outputs: Object.keys(instance.phase_outputs[id] ?? {}),
         })),
       };
-      writeFileSync(
-        join(this.outputDir, 'manifest.json'),
-        JSON.stringify(manifest, null, 2)
-      );
+      writeFileSync(join(this.outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
     } catch {
       // Non-critical
     }
   }
 
-  private resolveInjectedContext(injectKey: string | undefined, baseContext?: ExecutionContext): ExecutionContext | undefined {
+  private resolveInjectedContext(
+    injectKey: string | undefined,
+    baseContext?: ExecutionContext,
+  ): ExecutionContext | undefined {
     if (!injectKey) return baseContext;
 
     const workflowContext = this.ir.workflow.context as Record<string, unknown> | undefined;
     const filePath = workflowContext?.[injectKey];
 
     if (typeof filePath !== 'string') {
-      process.stderr.write(`  ⚠️  [inject_context] chiave "${injectKey}" non trovata nel workflow context\n`);
+      logger.warn(`[inject_context] chiave "${injectKey}" non trovata nel workflow context`);
       return baseContext;
     }
 
@@ -461,7 +538,7 @@ export class WorkflowRunner {
       const content = readFileSync(filePath, 'utf-8');
       return { ...baseContext, injectedContext: content };
     } catch {
-      process.stderr.write(`  ⚠️  [inject_context] file "${filePath}" non trovato — skipping\n`);
+      logger.warn(`[inject_context] file "${filePath}" non trovato — skipping`);
       return baseContext;
     }
   }
@@ -469,14 +546,16 @@ export class WorkflowRunner {
   private conditionToText(condition: Condition): string {
     switch (condition.kind) {
       case 'compare': {
-        const left = condition.left.kind === 'ref' ? condition.left.path : String(condition.left.value);
-        const right = condition.right.kind === 'ref' ? condition.right.path : String(condition.right.value);
+        const left =
+          condition.left.kind === 'ref' ? condition.left.path : String(condition.left.value);
+        const right =
+          condition.right.kind === 'ref' ? condition.right.path : String(condition.right.value);
         return `${left} ${condition.op} ${right}`;
       }
       case 'and':
-        return condition.conditions.map(c => this.conditionToText(c)).join(' AND ');
+        return condition.conditions.map((c) => this.conditionToText(c)).join(' AND ');
       case 'or':
-        return condition.conditions.map(c => this.conditionToText(c)).join(' OR ');
+        return condition.conditions.map((c) => this.conditionToText(c)).join(' OR ');
       case 'not':
         return `NOT (${this.conditionToText(condition.condition)})`;
     }
@@ -488,16 +567,24 @@ export class WorkflowRunner {
       const right = this.resolveValue(condition.right, instance);
       const passed = this.evaluateCondition(condition, instance);
       if (!passed) {
-        const leftLabel = condition.left.kind === 'ref' ? condition.left.path : JSON.stringify(condition.left.value);
-        const rightLabel = condition.right.kind === 'ref' ? condition.right.path : JSON.stringify(condition.right.value);
-        process.stderr.write(`  ❌ [done_when] ${prefix}${leftLabel} ${condition.op} ${rightLabel} → ${JSON.stringify(left)} ${condition.op} ${JSON.stringify(right)} = false\n`);
+        const leftLabel =
+          condition.left.kind === 'ref'
+            ? condition.left.path
+            : JSON.stringify(condition.left.value);
+        const rightLabel =
+          condition.right.kind === 'ref'
+            ? condition.right.path
+            : JSON.stringify(condition.right.value);
+        logger.warn(
+          `[done_when] ${prefix}${leftLabel} ${condition.op} ${rightLabel} → ${JSON.stringify(left)} ${condition.op} ${JSON.stringify(right)} = false`,
+        );
       }
     } else if (condition.kind === 'and') {
       for (const c of condition.conditions) {
         this.logConditionFailure(c, instance, prefix);
       }
     } else if (condition.kind === 'or') {
-      process.stderr.write(`  ❌ [done_when] ${prefix}OR block failed (all conditions false):\n`);
+      logger.warn(`[done_when] ${prefix}OR block failed (all conditions false):`);
       for (const c of condition.conditions) {
         this.logConditionFailure(c, instance, prefix + '  ');
       }

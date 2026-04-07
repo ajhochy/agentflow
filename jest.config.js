@@ -15,4 +15,9 @@ export default {
     ],
   },
   testMatch: ['**/tests/**/*.test.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/cli.ts',
+    '!src/mcp-server.ts',
+  ],
 };

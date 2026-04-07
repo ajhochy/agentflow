@@ -1,21 +1,47 @@
 import { parse } from './parser.js';
 import type {
-  ASTWorkflow, ASTAgent, ASTPhase, ASTLoop,
-  ASTProperty, ASTValue, ASTBlock, ASTList, ASTCondition, ASTLiteral, ASTRef,
-  WorkflowIR, AgentDef, PhaseDef, LoopDef, TriggerDef,
-  Condition, ValueExpr, Duration, MustProduceItem,
-  PollConfig, RetryConfig, RollbackOnFail, OnFailConfig,
-  InstructionToUser, OnTimeoutConfig, RollbackConfig, OnSuccessConfig,
+  ASTWorkflow,
+  ASTAgent,
+  ASTPhase,
+  ASTLoop,
+  ASTProperty,
+  ASTValue,
+  ASTBlock,
+  ASTList,
+  ASTCondition,
+  ASTLiteral,
+  ASTRef,
+  WorkflowIR,
+  AgentDef,
+  PhaseDef,
+  LoopDef,
+  TriggerDef,
+  Condition,
+  ValueExpr,
+  Duration,
+  MustProduceItem,
+  PollConfig,
+  RetryConfig,
+  RollbackOnFail,
+  OnFailConfig,
+  InstructionToUser,
+  OnTimeoutConfig,
+  RollbackConfig,
+  OnSuccessConfig,
 } from './types.js';
 
 const SIDE_EFFECT_TOOLS = new Set([
-  'file_write', 'database_write', 'config_write', 'traefik_api', 'acme_client',
+  'file_write',
+  'database_write',
+  'config_write',
+  'traefik_api',
+  'acme_client',
 ]);
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function findProp(props: ASTProperty[], key: string): ASTProperty | undefined {
-  return props.find(p => p.key === key);
+  return props.find((p) => p.key === key);
 }
 
 function getString(props: ASTProperty[], key: string): string | undefined {
@@ -43,7 +69,7 @@ function getStringList(props: ASTProperty[], key: string): string[] | undefined 
   const prop = findProp(props, key);
   if (!prop) return undefined;
   if (prop.value.kind === 'list') {
-    return prop.value.items.map(item => {
+    return prop.value.items.map((item) => {
       if (item.kind === 'literal') return String(item.value);
       if (item.kind === 'ref') return item.path;
       return '';
@@ -63,7 +89,9 @@ function getBlock(props: ASTProperty[], key: string): ASTProperty[] | undefined 
 export function parseDuration(s: string): Duration {
   const match = s.match(/^(\d+)(s|min|h|d)$/);
   if (!match) {
-    throw new Error(`Invalid duration format: "${s}". Expected format: <number><unit> (e.g., 30s, 5min, 48h, 7d)`);
+    throw new Error(
+      `Invalid duration format: "${s}". Expected format: <number><unit> (e.g., 30s, 5min, 48h, 7d)`,
+    );
   }
   return {
     value: parseInt(match[1], 10),
@@ -134,15 +162,13 @@ function compileAgent(ast: ASTAgent): AgentDef {
   const tools = getStringList(props, 'tools');
   const mustProduceList = compileMustProduce(props);
   const rules: string[] = props
-    .filter(p => p.key === 'rule')
-    .map(p => p.value.kind === 'literal' ? String(p.value.value) : '');
+    .filter((p) => p.key === 'rule')
+    .map((p) => (p.value.kind === 'literal' ? String(p.value.value) : ''));
   const constraints: string[] = props
-    .filter(p => p.key === 'constraint')
-    .map(p => p.value.kind === 'literal' ? String(p.value.value) : '');
+    .filter((p) => p.key === 'constraint')
+    .map((p) => (p.value.kind === 'literal' ? String(p.value.value) : ''));
 
-  const hasSideEffects = tools
-    ? tools.some(t => SIDE_EFFECT_TOOLS.has(t))
-    : undefined;
+  const hasSideEffects = tools ? tools.some((t) => SIDE_EFFECT_TOOLS.has(t)) : undefined;
 
   const agent: AgentDef = {
     id: ast.id,
@@ -165,7 +191,7 @@ function compileMustProduce(props: ASTProperty[]): MustProduceItem[] {
   if (!prop) return [];
 
   if (prop.value.kind === 'list') {
-    return prop.value.items.map(item => {
+    return prop.value.items.map((item) => {
       if (item.kind === 'literal') {
         return { name: String(item.value) };
       }
@@ -185,13 +211,16 @@ function compileMustProduce(props: ASTProperty[]): MustProduceItem[] {
 
   // Block-based must_produce (dash list parsed as block)
   if (prop.value.kind === 'block') {
-    return prop.value.properties.map(p => ({
+    return prop.value.properties.map((p) => ({
       name: p.key,
-      type: p.value.kind === 'literal' && p.value.rawType !== 'identifier'
-        ? String(p.value.value)
-        : (p.value.kind === 'literal' && p.value.rawType === 'identifier' && p.key !== String(p.value.value))
+      type:
+        p.value.kind === 'literal' && p.value.rawType !== 'identifier'
           ? String(p.value.value)
-          : undefined,
+          : p.value.kind === 'literal' &&
+              p.value.rawType === 'identifier' &&
+              p.key !== String(p.value.value)
+            ? String(p.value.value)
+            : undefined,
     }));
   }
 
@@ -229,7 +258,7 @@ function compilePhase(ast: ASTPhase): PhaseDef {
     const backoffStr = getString(retryBlock, 'backoff');
     phase.retry = {
       max_attempts: getNumber(retryBlock, 'max_attempts'),
-      backoff: backoffStr ? tryParseDuration(backoffStr) ?? backoffStr : undefined,
+      backoff: backoffStr ? (tryParseDuration(backoffStr) ?? backoffStr) : undefined,
       condition: compilePropCondition(retryBlock, 'condition'),
     };
 
@@ -354,10 +383,13 @@ function compileTrigger(props: ASTProperty[]): TriggerDef | undefined {
 
   if (inputProp) {
     if (inputProp.value.kind === 'list') {
-      inputs = inputProp.value.items.map(item => {
+      inputs = inputProp.value.items.map((item) => {
         if (item.kind === 'block') {
           const p = item.properties[0];
-          return { name: p.key, type: p.value.kind === 'literal' ? String(p.value.value) : 'string' };
+          return {
+            name: p.key,
+            type: p.value.kind === 'literal' ? String(p.value.value) : 'string',
+          };
         }
         if (item.kind === 'literal') {
           return { name: String(item.value), type: 'string' };

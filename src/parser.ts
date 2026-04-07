@@ -1,12 +1,26 @@
 import { tokenize } from './tokenizer.js';
 import type {
-  Token, TokenKind,
-  ASTWorkflow, ASTAgent, ASTPhase, ASTLoop,
-  ASTProperty, ASTValue, ASTLiteral, ASTRef, ASTList, ASTBlock, ASTCondition,
+  Token,
+  TokenKind,
+  ASTWorkflow,
+  ASTAgent,
+  ASTPhase,
+  ASTLoop,
+  ASTProperty,
+  ASTValue,
+  ASTLiteral,
+  ASTRef,
+  ASTList,
+  ASTBlock,
+  ASTCondition,
 } from './types.js';
 
 export class ParseError extends Error {
-  constructor(message: string, public line: number, public col: number) {
+  constructor(
+    message: string,
+    public line: number,
+    public col: number,
+  ) {
     super(`Parse error at line ${line}, col ${col}: ${message}`);
   }
 }
@@ -35,7 +49,8 @@ export class Parser {
     if (token.kind !== kind || (value !== undefined && token.value !== value)) {
       throw new ParseError(
         `Expected ${kind}${value ? `(${value})` : ''} but got ${token.kind}(${token.value})`,
-        token.line, token.col
+        token.line,
+        token.col,
       );
     }
     return this.advance();
@@ -205,7 +220,11 @@ export class Parser {
       }
 
       // No colon — might be an identifier used as value
-      return { kind: 'property', key, value: { kind: 'literal', value: key, rawType: 'identifier' } };
+      return {
+        kind: 'property',
+        key,
+        value: { kind: 'literal', value: key, rawType: 'identifier' },
+      };
     }
 
     // Skip unexpected tokens
@@ -217,7 +236,10 @@ export class Parser {
     this.expect('DASH');
     const token = this.peek();
 
-    if ((token.kind === 'KEYWORD' || token.kind === 'IDENTIFIER') && this.lookahead(1)?.kind === 'COLON') {
+    if (
+      (token.kind === 'KEYWORD' || token.kind === 'IDENTIFIER') &&
+      this.lookahead(1)?.kind === 'COLON'
+    ) {
       // "- key: value" — typed must_produce item
       const key = this.advance().value;
       this.advance(); // consume ':'
@@ -227,8 +249,10 @@ export class Parser {
 
     // "- value" — simple list item
     const value = this.parseAtom();
-    const key = typeof value === 'object' && 'value' in value && value.kind === 'literal'
-      ? String(value.value) : '_item';
+    const key =
+      typeof value === 'object' && 'value' in value && value.kind === 'literal'
+        ? String(value.value)
+        : '_item';
     return { kind: 'property', key, value };
   }
 
@@ -251,14 +275,17 @@ export class Parser {
         if (this.peek().kind === 'DASH') {
           this.advance(); // consume '-'
           // Check for "key: type" pattern
-          if ((this.peek().kind === 'KEYWORD' || this.peek().kind === 'IDENTIFIER') && this.lookahead(1)?.kind === 'COLON') {
+          if (
+            (this.peek().kind === 'KEYWORD' || this.peek().kind === 'IDENTIFIER') &&
+            this.lookahead(1)?.kind === 'COLON'
+          ) {
             const key = this.advance().value;
             this.advance(); // consume ':'
             const typeVal = this.parseAtom();
             // Represent as a block with key-value
             items.push({
               kind: 'block',
-              properties: [{ kind: 'property', key, value: typeVal }]
+              properties: [{ kind: 'property', key, value: typeVal }],
             });
           } else {
             items.push(this.parseAtom());
@@ -313,10 +340,27 @@ export class Parser {
         if (this.peek().kind === 'OPERATOR') {
           const nextOp = this.advance().value;
           const nextRight = this.parseAtom();
-          const nextCondition: ASTCondition = { kind: 'condition', left: nextLeft, op: nextOp, right: nextRight };
-          condition = { kind: 'condition', left: condition as unknown as ASTValue, op: logic, right: nextCondition as unknown as ASTValue, logic };
+          const nextCondition: ASTCondition = {
+            kind: 'condition',
+            left: nextLeft,
+            op: nextOp,
+            right: nextRight,
+          };
+          condition = {
+            kind: 'condition',
+            left: condition as unknown as ASTValue,
+            op: logic,
+            right: nextCondition as unknown as ASTValue,
+            logic,
+          };
         } else {
-          condition = { kind: 'condition', left: condition as unknown as ASTValue, op: logic, right: nextLeft, logic };
+          condition = {
+            kind: 'condition',
+            left: condition as unknown as ASTValue,
+            op: logic,
+            right: nextLeft,
+            logic,
+          };
         }
       }
 

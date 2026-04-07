@@ -5,7 +5,12 @@ export type ValueExpr =
   | { kind: 'literal'; value: string | number | boolean };
 
 export type Condition =
-  | { kind: 'compare'; left: ValueExpr; op: '==' | '!=' | '>' | '<' | '>=' | '<='; right: ValueExpr }
+  | {
+      kind: 'compare';
+      left: ValueExpr;
+      op: '==' | '!=' | '>' | '<' | '>=' | '<=';
+      right: ValueExpr;
+    }
   | { kind: 'and'; conditions: Condition[] }
   | { kind: 'or'; conditions: Condition[] }
   | { kind: 'not'; condition: Condition };
@@ -254,7 +259,7 @@ export type Token = {
 // ─── Runtime Types ───────────────────────────────────────────────────
 
 export type PhaseState = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-export type WorkflowState = 'pending' | 'running' | 'completed' | 'failed';
+export type WorkflowState = 'pending' | 'running' | 'completed' | 'failed' | 'paused';
 
 export type WorkflowInstance = {
   instance_id: string;

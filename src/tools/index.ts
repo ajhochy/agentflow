@@ -1,6 +1,7 @@
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { execSync } from 'node:child_process';
+import { logger } from '../logger.js';
 
 // ─── Tool Interface ────────────────────────────────────────────────
 
@@ -25,9 +26,7 @@ export class ToolRegistry {
   }
 
   getForAgent(toolNames: string[]): Tool[] {
-    return toolNames
-      .map(n => this.tools.get(n))
-      .filter((t): t is Tool => t !== undefined);
+    return toolNames.map((n) => this.tools.get(n)).filter((t): t is Tool => t !== undefined);
   }
 
   has(name: string): boolean {
@@ -63,7 +62,7 @@ export class FileWriteTool implements Tool {
 
     mkdirSync(dirname(absPath), { recursive: true });
     writeFileSync(absPath, input.content as string);
-    process.stderr.write(`  📝 [file_write] ${relPath}\n`);
+    logger.info(`[file_write] ${relPath}`);
     return { success: true, path: relPath };
   }
 }
@@ -110,11 +109,14 @@ export class ShellExecTool implements Tool {
     required: ['command'],
   };
 
-  constructor(private workDir: string, private timeoutMs = 30_000) {}
+  constructor(
+    private workDir: string,
+    private timeoutMs = 30_000,
+  ) {}
 
   async execute(input: Record<string, unknown>): Promise<Record<string, unknown>> {
     const command = input.command as string;
-    process.stderr.write(`  🔧 [shell_exec] ${command}\n`);
+    logger.info(`[shell_exec] ${command}`);
     try {
       const stdout = execSync(command, {
         cwd: this.workDir,

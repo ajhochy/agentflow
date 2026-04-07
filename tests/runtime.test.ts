@@ -64,7 +64,11 @@ function makeTempDir(): string {
 }
 
 function cleanup(dir: string): void {
-  try { rmSync(dir, { recursive: true, force: true }); } catch { /* noop */ }
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    /* noop */
+  }
 }
 
 // ─── Basic Run ─────────────────────────────────────────────────────
@@ -142,7 +146,7 @@ describe('WorkflowRunner — incremental state saving', () => {
 
     // Executor che non produce nulla
     const badExecutor = {
-      execute: async () => ({})
+      execute: async () => ({}),
     };
 
     const runner = new WorkflowRunner(ir, badExecutor);
@@ -188,7 +192,7 @@ describe('WorkflowRunner — resume', () => {
       trigger_input: { task: 'test' },
       phase_states: { write: 'completed' },
       phase_outputs: {
-        write: { code: 'const x = 1;', summary: 'done' }
+        write: { code: 'const x = 1;', summary: 'done' },
       },
       loop_iterations: {},
       loop_feedback: {},
@@ -202,7 +206,7 @@ describe('WorkflowRunner — resume', () => {
       execute: async () => {
         executionCount++;
         return { code: 'const y = 2;', summary: 'resumed' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, trackingExecutor);
@@ -315,7 +319,7 @@ describe('WorkflowRunner — resume mid-loop', () => {
       trigger_input: { task: 'test' },
       phase_states: { write: 'completed', review: 'failed' },
       phase_outputs: {
-        write: { code: 'const x = 1;', progress_note: 'draft' }
+        write: { code: 'const x = 1;', progress_note: 'draft' },
       },
       loop_iterations: { quality_gate: 1 },
       loop_feedback: {},
@@ -343,7 +347,7 @@ describe('WorkflowRunner — resume mid-loop', () => {
           }
         }
         return output;
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, trackingExecutor);
@@ -367,7 +371,7 @@ describe('WorkflowRunner — resume mid-loop', () => {
       phase_states: { write: 'completed', review: 'completed' },
       phase_outputs: {
         write: { code: 'v1', progress_note: 'ok' },
-        review: { verdict: 'needs_work', improvement_list: 'fix bugs', confidence: 0.5 }
+        review: { verdict: 'needs_work', improvement_list: 'fix bugs', confidence: 0.5 },
       },
       loop_iterations: { quality_gate: 1 },
       loop_feedback: {},
@@ -422,8 +426,8 @@ describe('WorkflowRunner — output to disk', () => {
     const codeExecutor = {
       execute: async () => ({
         code: 'export function hello() { return "world"; }',
-        summary: 'implemented hello function'
-      })
+        summary: 'implemented hello function',
+      }),
     };
 
     const runner = new WorkflowRunner(ir, codeExecutor, { outputDir });
@@ -539,7 +543,7 @@ describe('WorkflowRunner — done_when + confidence', () => {
           return { verdict: 'approved', confidence: 0.95 };
         }
         return { code: 'const x = 1;' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -558,7 +562,7 @@ describe('WorkflowRunner — done_when + confidence', () => {
           return { verdict: 'approved', confidence: 0.6 };
         }
         return { code: 'const x = 1;' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -582,7 +586,7 @@ describe('WorkflowRunner — done_when + confidence', () => {
           return { verdict: 'needs_work', confidence: 0.3 };
         }
         return { code: 'const x = 1;' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -613,7 +617,7 @@ describe('WorkflowRunner — done_when + confidence', () => {
           return { verdict: 'approved', confidence: 0.85 };
         }
         return { code: 'x' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -644,13 +648,17 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
 
     const receivedContexts: unknown[] = [];
     const executor = {
-      execute: async (agent: { id: string; must_produce?: { name: string }[] }, _input: Record<string, unknown>, context?: unknown) => {
+      execute: async (
+        agent: { id: string; must_produce?: { name: string }[] },
+        _input: Record<string, unknown>,
+        context?: unknown,
+      ) => {
         receivedContexts.push({ agent: agent.id, context });
         if (agent.id === 'critic') {
           return { verdict: 'approved', confidence: 0.95 };
         }
         return { code: 'x' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -674,7 +682,11 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
 
     let capturedCriteria: string | undefined;
     const executor = {
-      execute: async (agent: { id: string; must_produce?: { name: string }[] }, _input: Record<string, unknown>, context?: any) => {
+      execute: async (
+        agent: { id: string; must_produce?: { name: string }[] },
+        _input: Record<string, unknown>,
+        context?: any,
+      ) => {
         if (agent.id === 'critic' && context?.loop?.acceptance_criteria) {
           capturedCriteria = context.loop.acceptance_criteria;
         }
@@ -682,7 +694,7 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
           return { verdict: 'approved', confidence: 0.95 };
         }
         return { code: 'x' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -701,7 +713,11 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
     const iterationsSeen: number[] = [];
     let callCount = 0;
     const executor = {
-      execute: async (agent: { id: string; must_produce?: { name: string }[] }, _input: Record<string, unknown>, context?: any) => {
+      execute: async (
+        agent: { id: string; must_produce?: { name: string }[] },
+        _input: Record<string, unknown>,
+        context?: any,
+      ) => {
         if (agent.id === 'critic') {
           callCount++;
           if (context?.loop) iterationsSeen.push(context.loop.iteration);
@@ -711,7 +727,7 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
           return { verdict: 'needs_work', confidence: 0.4 };
         }
         return { code: 'x' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -769,22 +785,26 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
 
     const contexts: { agent: string; hasLoop: boolean }[] = [];
     const executor = {
-      execute: async (agent: { id: string; must_produce?: { name: string }[] }, _input: Record<string, unknown>, context?: any) => {
+      execute: async (
+        agent: { id: string; must_produce?: { name: string }[] },
+        _input: Record<string, unknown>,
+        context?: any,
+      ) => {
         contexts.push({ agent: agent.id, hasLoop: !!context?.loop });
         if (agent.id === 'critic') return { verdict: 'approved', confidence: 0.95 };
         if (agent.id === 'planner') return { plan: 'do stuff' };
         return { code: 'x' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
     await runner.run({ task: 'test' });
 
-    const plannerCtx = contexts.find(c => c.agent === 'planner');
-    const writerCtx = contexts.find(c => c.agent === 'writer');
+    const plannerCtx = contexts.find((c) => c.agent === 'planner');
+    const writerCtx = contexts.find((c) => c.agent === 'writer');
 
-    expect(plannerCtx!.hasLoop).toBe(false);  // pre-loop: no context
-    expect(writerCtx!.hasLoop).toBe(true);     // in-loop: has context
+    expect(plannerCtx!.hasLoop).toBe(false); // pre-loop: no context
+    expect(writerCtx!.hasLoop).toBe(true); // in-loop: has context
   });
 });
 
@@ -848,13 +868,17 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
 
     let capturedContext: string | undefined;
     const executor = {
-      execute: async (agent: { id: string; must_produce?: { name: string }[] }, _input: Record<string, unknown>, context?: any) => {
+      execute: async (
+        agent: { id: string; must_produce?: { name: string }[] },
+        _input: Record<string, unknown>,
+        context?: any,
+      ) => {
         if (agent.id === 'writer' && context?.injectedContext) {
           capturedContext = context.injectedContext;
         }
         if (agent.id === 'critic') return { verdict: 'approved', confidence: 0.9 };
         return { code: 'const x = 1;' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -870,13 +894,17 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
 
     let criticGotContext = false;
     const executor = {
-      execute: async (agent: { id: string; must_produce?: { name: string }[] }, _input: Record<string, unknown>, context?: any) => {
+      execute: async (
+        agent: { id: string; must_produce?: { name: string }[] },
+        _input: Record<string, unknown>,
+        context?: any,
+      ) => {
         if (agent.id === 'critic' && context?.injectedContext) {
           criticGotContext = true;
         }
         if (agent.id === 'critic') return { verdict: 'approved', confidence: 0.9 };
         return { code: 'const x = 1;' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -919,7 +947,7 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
       execute: async (_agent: { id: string }, _input: Record<string, unknown>, context?: any) => {
         if (context?.injectedContext) gotInjected = true;
         return { code: 'x' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);
@@ -957,7 +985,7 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
       execute: async (agent: { id: string }, _input: Record<string, unknown>, context?: any) => {
         capturedContext = context?.injectedContext;
         return { code: 'x' };
-      }
+      },
     };
 
     const runner = new WorkflowRunner(ir, executor);

@@ -1,0 +1,50 @@
+workflow blog_post
+  description: "Generate and refine a blog post with researcher, writer, and editor"
+  version: "1.0.0"
+
+  agents:
+    agent researcher
+      mode: patient
+      must_produce:
+        - outline
+        - key_points
+
+    agent writer
+      mode: focused
+      must_produce:
+        - draft
+        - word_count: int
+
+    agent editor
+      mode: adversarial
+      must_produce:
+        - verdict
+        - suggestions
+        - confidence: float
+      constraint: "Ensure clarity, accuracy, and engaging tone"
+
+  phases:
+    phase research
+      agent: researcher
+      input: [trigger.topic]
+      output: [outline, key_points]
+
+    phase write
+      agent: writer
+      input: [research.outline, research.key_points]
+      output: [draft, word_count]
+
+    phase edit
+      agent: editor
+      input: [write.draft]
+      output: [verdict, suggestions, confidence]
+
+  loop revision_cycle
+    phases: [write, edit]
+    repeat_while: edit.verdict == "needs_work"
+    max_iterations: 3
+    on_each_iteration:
+      send_to: writer
+      payload: edit.suggestions
+
+  done when: edit.confidence >= 0.8 and edit.verdict == "approved"

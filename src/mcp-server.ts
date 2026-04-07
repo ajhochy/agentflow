@@ -14,7 +14,7 @@ function loadWorkflows(dir: string): Map<string, WorkflowIR> {
 
   let files: string[];
   try {
-    files = readdirSync(dir).filter(f => f.endsWith('.aflow'));
+    files = readdirSync(dir).filter((f) => f.endsWith('.aflow'));
   } catch (err) {
     console.error(`[agentflow] Cannot read workflows dir: ${dir} — ${(err as Error).message}`);
     return workflows;
@@ -101,16 +101,18 @@ async function main() {
     try {
       switch (request.method) {
         case 'initialize': {
-          sendResponse(makeResult(request.id, {
-            protocolVersion: '2024-11-05',
-            capabilities: {
-              tools: {},
-            },
-            serverInfo: {
-              name: 'agentflow',
-              version: '0.1.0',
-            },
-          }));
+          sendResponse(
+            makeResult(request.id, {
+              protocolVersion: '2024-11-05',
+              capabilities: {
+                tools: {},
+              },
+              serverInfo: {
+                name: 'agentflow',
+                version: '0.1.0',
+              },
+            }),
+          );
           break;
         }
 
@@ -128,7 +130,10 @@ async function main() {
 
             if (w.trigger?.input) {
               for (const inp of w.trigger.input) {
-                properties[inp.name] = { type: mapType(inp.type), description: `Input: ${inp.name}` };
+                properties[inp.name] = {
+                  type: mapType(inp.type),
+                  description: `Input: ${inp.name}`,
+                };
                 required.push(inp.name);
               }
             } else {
@@ -152,7 +157,9 @@ async function main() {
         }
 
         case 'tools/call': {
-          const params = request.params as { name: string; arguments?: Record<string, unknown> } | undefined;
+          const params = request.params as
+            | { name: string; arguments?: Record<string, unknown> }
+            | undefined;
           if (!params?.name) {
             sendResponse(makeError(request.id, -32602, 'Missing tool name'));
             break;
@@ -168,20 +175,26 @@ async function main() {
           const runner = new WorkflowRunner(ir, executor);
           const instance = await runner.run(params.arguments ?? {});
 
-          sendResponse(makeResult(request.id, {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  workflow_id: instance.workflow_id,
-                  instance_id: instance.instance_id,
-                  state: instance.state,
-                  phase_outputs: instance.phase_outputs,
-                  loop_iterations: instance.loop_iterations,
-                }, null, 2),
-              },
-            ],
-          }));
+          sendResponse(
+            makeResult(request.id, {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(
+                    {
+                      workflow_id: instance.workflow_id,
+                      instance_id: instance.instance_id,
+                      state: instance.state,
+                      phase_outputs: instance.phase_outputs,
+                      loop_iterations: instance.loop_iterations,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            }),
+          );
           break;
         }
 
@@ -198,15 +211,20 @@ async function main() {
 function mapType(aflowType: string): string {
   switch (aflowType) {
     case 'int':
-    case 'float': return 'number';
-    case 'bool': return 'boolean';
-    case 'array': return 'array';
-    case 'object': return 'object';
-    default: return 'string';
+    case 'float':
+      return 'number';
+    case 'bool':
+      return 'boolean';
+    case 'array':
+      return 'array';
+    case 'object':
+      return 'object';
+    default:
+      return 'string';
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error(`[agentflow] Fatal: ${err.message}`);
   process.exit(1);
 });

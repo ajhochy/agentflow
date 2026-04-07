@@ -14,7 +14,11 @@ function makeTempDir(): string {
 }
 
 function cleanup(dir: string): void {
-  try { rmSync(dir, { recursive: true, force: true }); } catch { /* noop */ }
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    /* noop */
+  }
 }
 
 // ─── ToolRegistry ──────────────────────────────────────────────────
@@ -54,8 +58,12 @@ describe('ToolRegistry', () => {
 describe('FileWriteTool', () => {
   let tempDir: string;
 
-  beforeEach(() => { tempDir = makeTempDir(); });
-  afterEach(() => { cleanup(tempDir); });
+  beforeEach(() => {
+    tempDir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanup(tempDir);
+  });
 
   test('scrive file nella workDir', async () => {
     const tool = new FileWriteTool(tempDir);
@@ -87,8 +95,12 @@ describe('FileWriteTool', () => {
 describe('FileReadTool', () => {
   let tempDir: string;
 
-  beforeEach(() => { tempDir = makeTempDir(); });
-  afterEach(() => { cleanup(tempDir); });
+  beforeEach(() => {
+    tempDir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanup(tempDir);
+  });
 
   test('legge file esistente', async () => {
     writeFileSync(join(tempDir, 'test.txt'), 'hello world');
@@ -121,8 +133,12 @@ describe('FileReadTool', () => {
 describe('ShellExecTool', () => {
   let tempDir: string;
 
-  beforeEach(() => { tempDir = makeTempDir(); });
-  afterEach(() => { cleanup(tempDir); });
+  beforeEach(() => {
+    tempDir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanup(tempDir);
+  });
 
   test('esegue comando e ritorna stdout', async () => {
     const tool = new ShellExecTool(tempDir);

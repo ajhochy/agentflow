@@ -31,7 +31,7 @@ describe('Validator', () => {
     });
     const result = validate(ir);
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.rule === 'S1')).toBe(true);
+    expect(result.errors.some((e) => e.rule === 'S1')).toBe(true);
   });
 
   test('S2: fase con output non in must_produce → errors include S2', () => {
@@ -45,8 +45,8 @@ describe('Validator', () => {
     });
     const result = validate(ir);
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.rule === 'S2')).toBe(true);
-    expect(result.errors.find(e => e.rule === 'S2')!.message).toContain('missing_field');
+    expect(result.errors.some((e) => e.rule === 'S2')).toBe(true);
+    expect(result.errors.find((e) => e.rule === 'S2')!.message).toContain('missing_field');
   });
 
   test('S3: loop con fase inesistente → errors include S3', () => {
@@ -61,7 +61,7 @@ describe('Validator', () => {
     });
     const result = validate(ir);
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.rule === 'S3')).toBe(true);
+    expect(result.errors.some((e) => e.rule === 'S3')).toBe(true);
   });
 
   test('S5: loop senza max_iterations → errors include S5', () => {
@@ -75,7 +75,7 @@ describe('Validator', () => {
     });
     const result = validate(ir);
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.rule === 'S5')).toBe(true);
+    expect(result.errors.some((e) => e.rule === 'S5')).toBe(true);
   });
 
   test('S9: human_action_required senza timeout → errors include S9', () => {
@@ -85,21 +85,23 @@ describe('Validator', () => {
     });
     const result = validate(ir);
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.rule === 'S9')).toBe(true);
+    expect(result.errors.some((e) => e.rule === 'S9')).toBe(true);
   });
 
   test('S10: fase con poll e retry → errors include S10', () => {
     const ir = makeIR({
       agents: { checker: makeAgent('checker') },
-      phases: [makePhase('check', {
-        agent: 'checker',
-        poll: { interval: { value: 5, unit: 'min' } },
-        retry: { max_attempts: 3 },
-      })],
+      phases: [
+        makePhase('check', {
+          agent: 'checker',
+          poll: { interval: { value: 5, unit: 'min' } },
+          retry: { max_attempts: 3 },
+        }),
+      ],
     });
     const result = validate(ir);
     expect(result.ok).toBe(false);
-    expect(result.errors.some(e => e.rule === 'S10')).toBe(true);
+    expect(result.errors.some((e) => e.rule === 'S10')).toBe(true);
   });
 
   test('workflow valido → ok: true, errors: []', () => {
@@ -122,7 +124,7 @@ describe('Validator', () => {
       phases: [makePhase('write', { agent: 'writer' })],
     });
     const result = validate(ir);
-    expect(result.warnings.some(w => w.rule === 'S4')).toBe(true);
+    expect(result.warnings.some((w) => w.rule === 'S4')).toBe(true);
   });
 
   test('S6: must_produce confidence non float → error S6', () => {
@@ -135,7 +137,7 @@ describe('Validator', () => {
       phases: [],
     });
     const result = validate(ir);
-    expect(result.errors.some(e => e.rule === 'S6')).toBe(true);
+    expect(result.errors.some((e) => e.rule === 'S6')).toBe(true);
   });
 
   test('S6: must_produce confidence float → no error', () => {
@@ -148,7 +150,7 @@ describe('Validator', () => {
       phases: [],
     });
     const result = validate(ir);
-    expect(result.errors.some(e => e.rule === 'S6')).toBe(false);
+    expect(result.errors.some((e) => e.rule === 'S6')).toBe(false);
   });
 
   test('S7: agente adversarial con constraint approve → warning', () => {
@@ -162,6 +164,6 @@ describe('Validator', () => {
       phases: [],
     });
     const result = validate(ir);
-    expect(result.warnings.some(w => w.rule === 'S7')).toBe(true);
+    expect(result.warnings.some((w) => w.rule === 'S7')).toBe(true);
   });
 });

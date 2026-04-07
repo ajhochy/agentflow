@@ -2,11 +2,11 @@ import { tokenize } from '../src/tokenizer.js';
 import type { Token } from '../src/types.js';
 
 function kinds(tokens: Token[]): string[] {
-  return tokens.map(t => t.kind);
+  return tokens.map((t) => t.kind);
 }
 
 function values(tokens: Token[]): string[] {
-  return tokens.map(t => t.value);
+  return tokens.map((t) => t.value);
 }
 
 describe('Tokenizer', () => {
@@ -25,9 +25,7 @@ describe('Tokenizer', () => {
 
   test('tokenizza ref con operatore → corretto', () => {
     const tokens = tokenize('review.verdict == "approved"');
-    expect(kinds(tokens)).toEqual([
-      'IDENTIFIER', 'DOT', 'IDENTIFIER', 'OPERATOR', 'STRING', 'EOF'
-    ]);
+    expect(kinds(tokens)).toEqual(['IDENTIFIER', 'DOT', 'IDENTIFIER', 'OPERATOR', 'STRING', 'EOF']);
     expect(values(tokens)[0]).toBe('review');
     expect(values(tokens)[2]).toBe('verdict');
     expect(values(tokens)[3]).toBe('==');
@@ -80,7 +78,14 @@ describe('Tokenizer', () => {
   test('tokenizza lista inline [a, b, c]', () => {
     const tokens = tokenize('[a, b, c]');
     expect(kinds(tokens)).toEqual([
-      'LBRACKET', 'IDENTIFIER', 'COMMA', 'IDENTIFIER', 'COMMA', 'IDENTIFIER', 'RBRACKET', 'EOF'
+      'LBRACKET',
+      'IDENTIFIER',
+      'COMMA',
+      'IDENTIFIER',
+      'COMMA',
+      'IDENTIFIER',
+      'RBRACKET',
+      'EOF',
     ]);
   });
 
@@ -92,20 +97,26 @@ describe('Tokenizer', () => {
     // (indent) b → INDENT IDENTIFIER
     // (indent) c → INDENT IDENTIFIER
     // (dedent x2) d → DEDENT DEDENT IDENTIFIER
-    const dedentCount = kindList.filter(k => k === 'DEDENT').length;
+    const dedentCount = kindList.filter((k) => k === 'DEDENT').length;
     expect(dedentCount).toBe(2);
   });
 
   test('gestisce operatori != >= <=', () => {
     const tokens = tokenize('a != b >= c <= d');
-    const ops = tokens.filter(t => t.kind === 'OPERATOR').map(t => t.value);
+    const ops = tokens.filter((t) => t.kind === 'OPERATOR').map((t) => t.value);
     expect(ops).toEqual(['!=', '>=', '<=']);
   });
 
   test('gestisce and/or/not come token speciali', () => {
     const tokens = tokenize('a and b or not c');
     expect(kinds(tokens)).toEqual([
-      'IDENTIFIER', 'AND', 'IDENTIFIER', 'OR', 'NOT', 'IDENTIFIER', 'EOF'
+      'IDENTIFIER',
+      'AND',
+      'IDENTIFIER',
+      'OR',
+      'NOT',
+      'IDENTIFIER',
+      'EOF',
     ]);
   });
 

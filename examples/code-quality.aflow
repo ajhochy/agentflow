@@ -7,7 +7,7 @@ workflow code_quality
 
   agents:
     agent writer
-      model: "claude-sonnet"
+      model: "openrouter-smart"
       mode: focused
       tools: [file_write, code_review]
       must_produce:
@@ -19,7 +19,7 @@ workflow code_quality
       rule: "Write clean, testable code"
 
     agent tester
-      model: "claude-sonnet"
+      model: "openrouter-smart"
       mode: adversarial
       tools: [test_runner, coverage_tool]
       must_produce:
@@ -29,7 +29,7 @@ workflow code_quality
       constraint: "Try to break the code with edge cases"
 
     agent critic
-      model: "claude-sonnet"
+      model: "openrouter-smart"
       mode: adversarial
       must_produce:
         - verdict
