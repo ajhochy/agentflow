@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "agentflow": {
+      "command": "node",
+      "args": ["/PERCORSO_ASSOLUTO/dist/mcp-server.js"],
+      "env": {
+        "AGENTFLOW_WORKFLOWS_DIR": "/PERCORSO_ASSOLUTO/examples",
+        "ANTHROPIC_API_KEY": "sk-..."
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "instance_id": "566810ed-a831-45fa-8204-24c5cf140e23",
+  "workflow_id": "code_quality",
+  "state": "failed",
+  "trigger_input": {
+    "task": "Crea una funzione TypeScript che valida un email"
+  },
+  "phase_states": {
+    "write": "running",
+    "test": "pending",
+    "review": "pending"
+  },
+  "phase_outputs": {},
+  "loop_iterations": {
+    "quality_gate": 1
+  },
+  "started_at": "2026-04-07T12:02:40.442Z",
+  "completed_at": "2026-04-07T12:02:49.581Z"
+}

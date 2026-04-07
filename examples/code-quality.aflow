@@ -1,0 +1,68 @@
+workflow code_quality
+  description: "Iterative code quality workflow with writer, tester, and critic agents"
+  version: "1.0.0"
+
+  context:
+    rules_file: "coding-standards.md"
+
+  agents:
+    agent writer
+      model: "claude-sonnet"
+      mode: focused
+      tools: [file_write, code_review]
+      must_produce:
+        - user_story
+        - code
+        - progress_note
+      inject_context: rules_file
+      rule: "Follow project coding standards"
+      rule: "Write clean, testable code"
+
+    agent tester
+      model: "claude-sonnet"
+      mode: adversarial
+      tools: [test_runner, coverage_tool]
+      must_produce:
+        - test_results
+        - edge_cases_tried
+        - bug_report
+      constraint: "Try to break the code with edge cases"
+
+    agent critic
+      model: "claude-sonnet"
+      mode: adversarial
+      must_produce:
+        - verdict
+        - improvement_list
+        - confidence: float
+      constraint: "Be critical and thorough in review"
+
+  phases:
+    phase write
+      agent: writer
+      input: [trigger.task]
+      output: [user_story, code, progress_note]
+
+    phase test
+      agent: tester
+      input: [write.code]
+      output: [test_results, edge_cases_tried, bug_report]
+
+    phase review
+      agent: critic
+      input: [write.code, test.test_results, test.bug_report]
+      output: [verdict, improvement_list, confidence]
+
+  loop quality_gate
+    phases: [write, test, review]
+    repeat_while: review.verdict == "needs_work"
+    max_iterations: 10
+    on_each_iteration:
+      send_to: writer
+      payload: review.improvement_list
+    on_max_exceeded:
+      escalate_to: human_reviewer
+      message: "Quality gate exceeded max iterations"
+      attach: [review.improvement_list, test.bug_report]
+
+  done when: review.confidence >= 0.85 and review.verdict == "approved"

@@ -1,0 +1,186 @@
+{
+  "$schema": "https://agentflow.dev/ir/v0.1.schema.json",
+  "$agentflow_version": "0.1.0",
+  "compiled_at": "2026-04-07T09:22:17.007Z",
+  "workflow": {
+    "id": "code_quality",
+    "description": "Iterative code quality workflow with writer, tester, and critic agents",
+    "version": "1.0.0",
+    "context": {
+      "rules_file": "coding-standards.md"
+    },
+    "agents": {
+      "writer": {
+        "id": "writer",
+        "model": "claude-sonnet",
+        "mode": "focused",
+        "tools": [
+          "file_write",
+          "code_review"
+        ],
+        "must_produce": [
+          {
+            "name": "user_story"
+          },
+          {
+            "name": "code"
+          },
+          {
+            "name": "progress_note"
+          }
+        ],
+        "inject_context": "rules_file",
+        "rules": [
+          "Follow project coding standards",
+          "Write clean, testable code"
+        ],
+        "has_side_effects": true
+      },
+      "tester": {
+        "id": "tester",
+        "model": "claude-sonnet",
+        "mode": "adversarial",
+        "tools": [
+          "test_runner",
+          "coverage_tool"
+        ],
+        "must_produce": [
+          {
+            "name": "test_results"
+          },
+          {
+            "name": "edge_cases_tried"
+          },
+          {
+            "name": "bug_report"
+          }
+        ],
+        "constraints": [
+          "Try to break the code with edge cases"
+        ],
+        "has_side_effects": false
+      },
+      "critic": {
+        "id": "critic",
+        "model": "claude-sonnet",
+        "mode": "adversarial",
+        "must_produce": [
+          {
+            "name": "verdict"
+          },
+          {
+            "name": "improvement_list"
+          },
+          {
+            "name": "confidence",
+            "type": "float"
+          }
+        ],
+        "constraints": [
+          "Be critical and thorough in review"
+        ]
+      }
+    },
+    "phases": [
+      {
+        "id": "write",
+        "agent": "writer",
+        "input": [
+          "trigger.task"
+        ],
+        "output": [
+          "user_story",
+          "code",
+          "progress_note"
+        ],
+        "type": "standard"
+      },
+      {
+        "id": "test",
+        "agent": "tester",
+        "input": [
+          "write.code"
+        ],
+        "output": [
+          "test_results",
+          "edge_cases_tried",
+          "bug_report"
+        ],
+        "type": "standard"
+      },
+      {
+        "id": "review",
+        "agent": "critic",
+        "input": [
+          "write.code",
+          "test.test_results",
+          "test.bug_report"
+        ],
+        "output": [
+          "verdict",
+          "improvement_list",
+          "confidence"
+        ],
+        "type": "standard"
+      }
+    ],
+    "loop": {
+      "id": "quality_gate",
+      "phases": [
+        "write",
+        "test",
+        "review"
+      ],
+      "max_iterations": 5,
+      "repeat_while": {
+        "kind": "compare",
+        "left": {
+          "kind": "ref",
+          "path": "review.verdict"
+        },
+        "op": "==",
+        "right": {
+          "kind": "literal",
+          "value": "needs_work"
+        }
+      },
+      "on_max_exceeded": {
+        "escalate_to": "human_reviewer",
+        "message": "Quality gate exceeded max iterations",
+        "attach": [
+          "review.improvement_list",
+          "test.bug_report"
+        ]
+      }
+    },
+    "done_when": {
+      "kind": "and",
+      "conditions": [
+        {
+          "kind": "compare",
+          "left": {
+            "kind": "ref",
+            "path": "review.confidence"
+          },
+          "op": ">=",
+          "right": {
+            "kind": "literal",
+            "value": 0.85
+          }
+        },
+        {
+          "kind": "compare",
+          "left": {
+            "kind": "ref",
+            "path": "review.verdict"
+          },
+          "op": "==",
+          "right": {
+            "kind": "literal",
+            "value": "approved"
+          }
+        }
+      ]
+    }
+  }
+}

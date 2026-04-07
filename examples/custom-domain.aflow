@@ -1,0 +1,150 @@
+workflow custom_domain_provisioning
+  description: "End-to-end custom domain provisioning with DNS, SSL, proxy, and database"
+  version: "1.0.0"
+
+  trigger:
+    on_event: domain_request
+    input:
+      - domain: string
+      - user_id: string
+      - plan_tier: string
+
+  agents:
+    agent dns_validator
+      model: "claude-sonnet"
+      mode: strict
+      tools: [dns_lookup, whois_check]
+      must_produce:
+        - domain_valid: bool
+        - suggested_dns_records
+        - validation_errors
+
+    agent dns_guide
+      model: "claude-sonnet"
+      mode: patient
+      must_produce:
+        - instructions_sent: bool
+
+    agent dns_checker
+      model: "claude-sonnet"
+      mode: patient
+      tools: [dns_lookup]
+      must_produce:
+        - dns_propagated: bool
+        - current_records
+
+    agent ssl_provisioner
+      model: "claude-sonnet"
+      mode: reliable
+      tools: [acme_client]
+      must_produce:
+        - ssl_certificate
+        - ssl_expiry: datetime
+      fail_fast: true
+
+    agent proxy_configurator
+      model: "claude-sonnet"
+      mode: precise
+      tools: [traefik_api, config_write]
+      must_produce:
+        - proxy_configured: bool
+        - routing_rules
+
+    agent db_updater
+      model: "claude-sonnet"
+      mode: reliable
+      tools: [database_write]
+      must_produce:
+        - domain_record_id: string
+        - dns_zone_updated: bool
+
+    agent health_checker
+      model: "claude-sonnet"
+      mode: adversarial
+      tools: [dns_lookup]
+      must_produce:
+        - domain_resolves: bool
+        - ssl_valid: bool
+        - response_code: int
+        - latency_ms: float
+
+  phases:
+    phase validate
+      agent: dns_validator
+      input: [trigger.domain]
+      output: [domain_valid, suggested_dns_records, validation_errors]
+      on_fail:
+        action: notify_user
+        message: "Domain validation failed"
+        then: abort
+
+    phase await_user_dns
+      agent: dns_guide
+      type: human_action_required
+      input: [validate.suggested_dns_records]
+      output: [instructions_sent]
+      timeout: 72h
+      instruction_to_user:
+        message: "Please configure DNS records for your domain"
+        data: validate.suggested_dns_records
+        format: table
+      completes_when: user_confirms
+      on_timeout:
+        action: send_reminder
+        then: continue_waiting
+
+    phase wait_dns_propagation
+      agent: dns_checker
+      input: [trigger.domain, validate.suggested_dns_records]
+      output: [dns_propagated, current_records]
+      poll:
+        interval: 5min
+        backoff: exponential
+        max_wait: 48h
+        condition: wait_dns_propagation.dns_propagated == true
+
+    phase provision_ssl
+      agent: ssl_provisioner
+      input: [trigger.domain]
+      output: [ssl_certificate, ssl_expiry]
+      retry:
+        max_attempts: 3
+        backoff: 30s
+        on_all_failed:
+          reschedule: 1h
+
+    phase configure_proxy
+      agent: proxy_configurator
+      input: [trigger.domain, provision_ssl.ssl_certificate]
+      output: [proxy_configured, routing_rules]
+      rollback_on_fail:
+        undo: [provision_ssl]
+
+    phase update_database
+      agent: db_updater
+      input: [trigger.domain, trigger.user_id, provision_ssl.ssl_expiry]
+      output: [domain_record_id, dns_zone_updated]
+      rollback_on_fail:
+        undo: [configure_proxy, provision_ssl]
+
+    phase verify
+      agent: health_checker
+      input: [trigger.domain]
+      output: [domain_resolves, ssl_valid, response_code, latency_ms]
+      retry:
+        max_attempts: 5
+        backoff: 30s
+        on_all_failed:
+          escalate_to: support_team
+
+  rollback:
+    priority_order: [db_updater, proxy_configurator, ssl_provisioner]
+    notify_user: true
+    log_to: audit_log
+
+  on_success:
+    notify_user:
+      message: "Your custom domain is now active!"
+      attach: [verify.domain_resolves, verify.ssl_valid]
+
+  done when: health_checker.domain_resolves == true and health_checker.ssl_valid == true

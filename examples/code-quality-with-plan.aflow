@@ -1,0 +1,86 @@
+workflow code_quality_with_plan
+  description: "Code quality workflow with upfront planning phase"
+  version: "1.1.0"
+
+  trigger:
+    on_event: mcp_tool_call
+    input:
+      - task_plan: string
+      - context_files: array
+      - session_id: string
+
+  context:
+    rules_file: "coding-standards.md"
+
+  agents:
+    agent planner
+      model: "claude-sonnet"
+      mode: focused
+      must_produce:
+        - implementation_steps
+        - acceptance_criteria
+        - risk_notes
+      rule: "Break down the task into clear, actionable steps"
+
+    agent writer
+      model: "claude-sonnet"
+      mode: focused
+      tools: [file_write, code_review]
+      must_produce:
+        - user_story
+        - code
+        - progress_note
+      inject_context: rules_file
+      rule: "Follow project coding standards"
+      rule: "Follow the implementation steps from the plan"
+
+    agent tester
+      model: "claude-sonnet"
+      mode: adversarial
+      tools: [test_runner, coverage_tool]
+      must_produce:
+        - test_results
+        - edge_cases_tried
+        - bug_report
+      constraint: "Verify acceptance criteria are met"
+
+    agent critic
+      model: "claude-sonnet"
+      mode: adversarial
+      must_produce:
+        - verdict
+        - improvement_list
+        - confidence: float
+      constraint: "Be critical and thorough in review"
+
+  phases:
+    phase structure_plan
+      agent: planner
+      input: [trigger.task_plan, trigger.context_files]
+      output: [implementation_steps, acceptance_criteria, risk_notes]
+
+    phase write
+      agent: writer
+      input: [trigger.task_plan, structure_plan.implementation_steps, structure_plan.acceptance_criteria]
+      output: [user_story, code, progress_note]
+
+    phase test
+      agent: tester
+      input: [write.code, structure_plan.acceptance_criteria]
+      output: [test_results, edge_cases_tried, bug_report]
+
+    phase review
+      agent: critic
+      input: [write.code, test.test_results, test.bug_report, structure_plan.acceptance_criteria]
+      output: [verdict, improvement_list, confidence]
+
+  loop quality_gate
+    phases: [write, test, review]
+    repeat_while: review.verdict == "needs_work"
+    max_iterations: 10
+    on_max_exceeded:
+      escalate_to: human_reviewer
+      message: "Quality gate exceeded max iterations"
+      attach: [review.improvement_list, test.bug_report]
+
+  done when: review.confidence >= 0.85 and review.verdict == "approved"

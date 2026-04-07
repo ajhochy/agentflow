@@ -1,0 +1,30 @@
+{
+  "instance_id": "a43ad73a-d1e6-4636-afe5-7ec6a5d56c3d",
+  "workflow_id": "code_quality",
+  "state": "failed",
+  "trigger_input": {
+    "task": "Crea una funzione TypeScript che valida un email"
+  },
+  "phase_states": {
+    "write": "completed",
+    "test": "completed",
+    "review": "running"
+  },
+  "phase_outputs": {
+    "write": {
+      "user_story": "Come sviluppatore, voglio una funzione TypeScript affidabile per validare il formato di un indirizzo email fornito, in modo da garantire che i dati immessi siano conformi agli standard.",
+      "code": "/**\n * TypeScript function to validate an email address format.\n * @param email The email string to validate.\n * @returns True if the email is valid, false otherwise.\n */\nconst isValidEmail = (email: string): boolean => {\n  if (!email || typeof email !== 'string') {\n    return false;\n  }\n  // Basic regex for email validation (RFC 5322 compliant regex is extremely complex, \n  // this is a widely accepted practical standard).\n  const emailRegex = new RegExp(\"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$\");\n  return emailRegex.test(email.trim());\n};\n\n// --- Examples and Testing ---\n\n// console.log(`test@example.com: ${isValidEmail('test@example.com')}`); // Expected: true\n// console.log(`user.name+tag@sub.domain.co: ${isValidEmail('user.name+tag@sub.domain.co')}`); // Expected: true\n// console.log(`invalid-email: ${isValidEmail('invalid-email')}`); // Expected: false\n// console.log(`@missing-user.com: ${isValidEmail('@missing-user.com')}`); // Expected: false\n// console.log(`user@.com: ${isValidEmail('user@.com')}`); // Expected: false\n// console.log(`null input: ${isValidEmail(null as any)}`); // Expected: false\n// console.log(`undefined input: ${isValidEmail(undefined as any)}`); // Expected: false",
+      "progress_note": "Implementata una funzione TypeScript `isValidEmail` che utilizza una Regular Expression standard per la validazione del formato email. Include controlli iniziali per null/undefined e trailing/leading spaces tramite `.trim()`. Il codice è ben commentato e include esempi di test per dimostrarne l'uso e la robustezza."
+    },
+    "test": {
+      "test_results": "Passed all basic and intended negative examples provided in the comments. The function correctly handles null/undefined inputs due to the explicit type check.",
+      "edge_cases_tried": "Tested whitespace-only input (\"   \"), input containing only special characters, and inputs designed to test domain structure flaws (e.g., \"user@domain..com\").",
+      "bug_report": "The primary flaw lies in the domain part of the regex: `[a-zA-Z0-9.-]+`. This pattern is overly permissive for domain name validation and fails to enforce structural rules mandated by DNS. Specifically:\n1.  **Consecutive Dots:** It incorrectly validates emails with consecutive dots in the domain part, such as `test@domain..com`, because `[.-]+` allows matching `..`. \n2.  **Domain Component Boundaries:** It does not sufficiently restrict leading or trailing dots/hyphens within domain components, although this is difficult with a single regex segment. A more robust solution would require validating domain labels (segments between dots) individually to ensure they do not start or end with a hyphen or dot, and that dots are not consecutive.\n\nRecommendation: Improve the domain regex to explicitly disallow consecutive dots (e.g., by restructuring the domain match to enforce `label(.-label)*`)."
+    }
+  },
+  "loop_iterations": {
+    "quality_gate": 1
+  },
+  "started_at": "2026-04-07T11:42:33.432Z",
+  "completed_at": "2026-04-07T11:44:12.447Z"
+}

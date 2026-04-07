@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --loader ts-jest/esm-register -e ':*)"
+    ],
+    "additionalDirectories": [
+      "/Users/mauriziopalumbo/Dev/MCP-DSL/src"
+    ]
+  }
+}
