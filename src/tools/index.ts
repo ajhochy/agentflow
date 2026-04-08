@@ -17,11 +17,11 @@ export interface Tool {
 export class TestRunnerTool implements Tool {
   name = 'test_runner';
   description =
-    'Esegue codice TypeScript in un file temporaneo e restituisce stdout, stderr e exit code.';
+    'Executes TypeScript code in a temporary file and returns stdout, stderr, and exit code.';
   input_schema = {
     type: 'object' as const,
     properties: {
-      code: { type: 'string', description: 'Codice TypeScript da eseguire' },
+      code: { type: 'string', description: 'TypeScript code to execute' },
       timeout_ms: { type: 'number', description: 'Timeout in ms (default: 10000)' },
     },
     required: ['code'],
@@ -38,7 +38,7 @@ export class TestRunnerTool implements Tool {
 
     try {
       wfs(tmpFile, code, 'utf-8');
-      process.stderr.write(`  🧪 [test_runner] esecuzione...\n`);
+      process.stderr.write(`  🧪 [test_runner] running...\n`);
       const stdout = execSync(`npx tsx ${tmpFile}`, {
         timeout,
         encoding: 'utf-8',
@@ -196,6 +196,6 @@ export function createBuiltinRegistry(workDir: string): ToolRegistry {
   registry.register(new FileWriteTool(workDir));
   registry.register(new FileReadTool(workDir));
   registry.register(new ShellExecTool(workDir));
-  registry.register(new TestRunnerTool()); // ← aggiunto
+  registry.register(new TestRunnerTool());
   return registry;
 }

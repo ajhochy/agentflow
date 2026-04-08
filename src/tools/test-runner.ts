@@ -6,11 +6,11 @@ import { randomUUID } from 'node:crypto';
 
 export class TestRunnerTool {
   name = 'test_runner';
-  description = 'Esegue codice TypeScript e restituisce stdout, stderr e exit code';
+  description = 'Executes TypeScript code and returns stdout, stderr, and exit code';
   input_schema = {
     type: 'object' as const,
     properties: {
-      code: { type: 'string', description: 'Codice TypeScript da eseguire' },
+      code: { type: 'string', description: 'TypeScript code to execute' },
       timeout_ms: { type: 'number', description: 'Timeout in ms (default: 10000)' },
     },
     required: ['code'],
