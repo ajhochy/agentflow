@@ -125,19 +125,19 @@ function buildModelChoices(models: ORModel[], defaultId: string) {
     },
     ...topModels.map(toChoice),
     {
-      name: chalk.bold('── 🆓 Gratuiti ──────────────────────────'),
+      name: chalk.bold('── 🆓 Free ───────────────────────────────'),
       value: '__sep2__',
       disabled: true,
     },
     ...freeModels.map(toChoice),
     {
-      name: chalk.bold('── 📦 Altri ─────────────────────────────'),
+      name: chalk.bold('── 📦 Others ────────────────────────────'),
       value: '__sep3__',
       disabled: true,
     },
     ...otherModels.slice(0, 50).map(toChoice),
     {
-      name: chalk.dim('── digita manualmente ───────────────────'),
+      name: chalk.dim('── enter manually ───────────────────────'),
       value: '__custom__',
       short: 'custom',
     },
@@ -174,18 +174,18 @@ export async function runInit(): Promise<void> {
     }
   }
 
-  console.log(chalk.bold('\n🤖 AgentFlow — Setup iniziale\n'));
+  console.log(chalk.bold('\n🤖 AgentFlow — Initial setup\n'));
 
-  // ── 1. Rileva Ollama ─────────────────────────────────────────────
-  process.stdout.write(chalk.dim('⠋ Rilevamento modelli Ollama...'));
+  // ── 1. Detect Ollama ─────────────────────────────────────────────
+  process.stdout.write(chalk.dim('⠋ Detecting Ollama models...'));
   const ollamaModels = await detectOllamaModels();
   process.stdout.write('\r' + ' '.repeat(50) + '\r');
 
   if (ollamaModels.length === 0) {
-    console.log(chalk.yellow('⚠️  Ollama non trovato o nessun modello installato.'));
+    console.log(chalk.yellow('⚠️  Ollama not found or no models installed.'));
     console.log(chalk.dim('   → https://ollama.com  →  ollama pull qwen3:8b\n'));
   } else {
-    console.log(chalk.green(`✅ Trovati ${ollamaModels.length} modelli Ollama:`));
+    console.log(chalk.green(`✅ Found ${ollamaModels.length} Ollama models:`));
     for (const m of ollamaModels) {
       console.log(`   • ${m.name.padEnd(28)} ${formatSize(m.size)}`);
     }
@@ -194,12 +194,12 @@ export async function runInit(): Promise<void> {
 
   // ── 2. Provider ──────────────────────────────────────────────────
   const provider = await select({
-    message: 'Provider default?',
+    message: 'Default provider?',
     choices: [
-      { name: 'ollama       — locale, gratuito', value: 'ollama' },
-      { name: 'openrouter   — cloud, accesso a tutti i modelli', value: 'openrouter' },
-      { name: 'claude       — Anthropic diretto', value: 'claude' },
-      { name: 'auto         — cloud se API key presente, altrimenti Ollama', value: 'auto' },
+      { name: 'ollama       — local, free', value: 'ollama' },
+      { name: 'openrouter   — cloud, access to all models', value: 'openrouter' },
+      { name: 'claude       — Anthropic direct', value: 'claude' },
+      { name: 'auto         — cloud if API key present, otherwise Ollama', value: 'auto' },
     ],
   });
 
@@ -210,7 +210,7 @@ export async function runInit(): Promise<void> {
   if (provider === 'claude' || provider === 'auto') {
     const existing = anthropicKey;
     const masked = existing ? `${existing.slice(0, 8)}...` : undefined;
-    if (masked) console.log(chalk.dim(`   Key esistente: ${masked}`));
+    if (masked) console.log(chalk.dim(`   Existing key: ${masked}`));
     const k = await input({ message: 'ANTHROPIC_API_KEY', default: existing || undefined });
     if (k) anthropicKey = k;
   }
@@ -218,7 +218,7 @@ export async function runInit(): Promise<void> {
   if (provider === 'openrouter' || provider === 'auto') {
     const existing = openrouterKey;
     const masked = existing ? `${existing.slice(0, 8)}...` : undefined;
-    if (masked) console.log(chalk.dim(`   Key esistente: ${masked}`));
+    if (masked) console.log(chalk.dim(`   Existing key: ${masked}`));
     const k = await input({
       message: 'OPENROUTER_API_KEY (https://openrouter.ai/keys)',
       default: existing || undefined,
@@ -228,7 +228,7 @@ export async function runInit(): Promise<void> {
 
   // ── 4. RAM ───────────────────────────────────────────────────────
   const ramStr = await select({
-    message: 'RAM disponibile?',
+    message: 'Available RAM?',
     choices: [
       { name: '8 GB', value: '8' },
       { name: '16 GB', value: '16' },
@@ -256,72 +256,72 @@ export async function runInit(): Promise<void> {
         value: m.name,
         short: m.name,
       })),
-      { name: chalk.dim('digita manualmente'), value: '__custom__', short: 'custom' },
+      { name: chalk.dim('enter manually'), value: '__custom__', short: 'custom' },
     ];
 
     const smartSel = await select({
-      message: 'Modello Ollama smart?',
+      message: 'Ollama smart model?',
       choices: ollamaChoices,
       default: ollamaSmartDefault,
     });
     if (smartSel === '__custom__') {
-      ollamaSmartModel = await input({ message: 'Modello Ollama smart (es. qwen3:14b)' });
+      ollamaSmartModel = await input({ message: 'Ollama smart model (e.g. qwen3:14b)' });
     } else {
       ollamaSmartModel = smartSel;
     }
 
     const fastSel = await select({
-      message: 'Modello Ollama fast?',
+      message: 'Ollama fast model?',
       choices: ollamaChoices,
       default: ollamaFastDefault,
     });
     if (fastSel === '__custom__') {
-      ollamaFastModel = await input({ message: 'Modello Ollama fast (es. qwen3:8b)' });
+      ollamaFastModel = await input({ message: 'Ollama fast model (e.g. qwen3:8b)' });
     } else {
       ollamaFastModel = fastSel;
     }
   }
 
-  // ── 6. Modelli OpenRouter ────────────────────────────────────────
+  // ── 6. OpenRouter models ─────────────────────────────────────────
   let orSmartModel = 'google/gemini-2.5-pro';
   let orFreeModel = 'meta-llama/llama-3.3-8b-instruct:free';
 
   if (provider === 'openrouter' || openrouterKey) {
-    process.stdout.write(chalk.dim('⠋ Caricamento modelli OpenRouter...'));
+    process.stdout.write(chalk.dim('⠋ Loading OpenRouter models...'));
     const orModels = await fetchOpenRouterModels(openrouterKey);
     process.stdout.write('\r' + ' '.repeat(50) + '\r');
 
     const list = orModels.length > 0 ? orModels : STATIC_MODELS;
-    console.log(chalk.green(`✅ ${list.length} modelli OpenRouter disponibili\n`));
+    console.log(chalk.green(`✅ ${list.length} OpenRouter models available\n`));
 
     const smartChoices = buildModelChoices(list, orSmartModel);
 
     const smartSel = await select({
-      message: 'Modello OpenRouter smart?',
+      message: 'OpenRouter smart model?',
       choices: smartChoices,
       pageSize: 20,
     });
     if (smartSel === '__custom__') {
-      orSmartModel = await input({ message: 'ID modello (es. qwen/qwen3-235b-a22b)' });
+      orSmartModel = await input({ message: 'Model ID (e.g. qwen/qwen3-235b-a22b)' });
     } else {
       orSmartModel = smartSel;
     }
 
     const freeSel = await select({
-      message: 'Modello OpenRouter free/fast?',
+      message: 'OpenRouter free/fast model?',
       choices: smartChoices,
       pageSize: 20,
       default: orFreeModel,
     });
     if (freeSel === '__custom__') {
-      orFreeModel = await input({ message: 'ID modello (es. qwen/qwen3-8b:free)' });
+      orFreeModel = await input({ message: 'Model ID (e.g. qwen/qwen3-8b:free)' });
     } else {
       orFreeModel = freeSel;
     }
   }
 
-  // ── 7. Conferma ──────────────────────────────────────────────────
-  console.log(chalk.bold('\nRiepilogo configurazione:'));
+  // ── 7. Confirm ───────────────────────────────────────────────────
+  console.log(chalk.bold('\nConfiguration summary:'));
   console.log(`   Provider         → ${chalk.cyan(provider)}`);
   console.log(`   Ollama smart     → ${chalk.cyan(ollamaSmartModel)}  (num_ctx: ${numCtx})`);
   console.log(`   Ollama fast      → ${chalk.cyan(ollamaFastModel)}`);
@@ -331,13 +331,13 @@ export async function runInit(): Promise<void> {
   }
   console.log();
 
-  const ok = await confirm({ message: 'Confermi?', default: true });
+  const ok = await confirm({ message: 'Confirm?', default: true });
   if (!ok) {
-    console.log(chalk.yellow('\nSetup annullato.'));
+    console.log(chalk.yellow('\nSetup cancelled.'));
     return;
   }
 
-  // ── 8. Scrivi config ─────────────────────────────────────────────
+  // ── 8. Write config ──────────────────────────────────────────────
   const config = {
     models: {
       auto: {
@@ -369,7 +369,7 @@ export async function runInit(): Promise<void> {
   };
 
   writeFileSync('agentflow.config.json', JSON.stringify(config, null, 2));
-  console.log(chalk.green('\n✅ agentflow.config.json salvato'));
+  console.log(chalk.green('\n✅ agentflow.config.json saved'));
 
   // ── 9. .env ──────────────────────────────────────────────────────
   let envUpdated = false;
@@ -381,19 +381,20 @@ export async function runInit(): Promise<void> {
     writeEnvKey('OPENROUTER_API_KEY', openrouterKey);
     envUpdated = true;
   }
-  if (envUpdated) console.log(chalk.green('✅ .env aggiornato'));
+  if (envUpdated) console.log(chalk.green('✅ .env updated'));
 
-  // ── 10. .gitignore ────────────────────────────────────────────────
+  // ── 10. .gitignore ───────────────────────────────────────────────
   if (existsSync('.gitignore')) {
     const gi = readFileSync('.gitignore', 'utf-8');
     if (!gi.includes('.env')) appendFileSync('.gitignore', '\n.env\n');
   } else {
     writeFileSync('.gitignore', '.env\noutput/\n*.state.json\n');
   }
-  console.log(chalk.green('✅ .gitignore aggiornato'));
+  console.log(chalk.green('✅ .gitignore updated'));
 
-  console.log(chalk.bold('\n🚀 Pronto! Prova:'));
-  console.log(
-    chalk.cyan(`   npx tsx src/cli.ts run examples/code-quality.aflow --input 'task="test"'\n`),
-  );
+  console.log(chalk.bold('\n🚀 Ready! Try:'));
+  console.log(chalk.cyan(`   agentflow check examples/code-quality.aflow`));
+  console.log(chalk.cyan(`   agentflow run examples/code-quality.aflow --input 'task="test"'`));
+  console.log(chalk.bold('\n🔌 To use in Claude Code:'));
+  console.log(chalk.cyan(`   agentflow mcp-config\n`));
 }

@@ -526,11 +526,19 @@ export class WorkflowRunner {
   ): ExecutionContext | undefined {
     if (!injectKey) return baseContext;
 
+    // Try direct file path first
+    try {
+      const content = readFileSync(injectKey, 'utf-8');
+      return { ...baseContext, injectedContext: content };
+    } catch {
+      // Not a direct path — fall back to workflow context key lookup
+    }
+
     const workflowContext = this.ir.workflow.context as Record<string, unknown> | undefined;
     const filePath = workflowContext?.[injectKey];
 
     if (typeof filePath !== 'string') {
-      logger.warn(`[inject_context] chiave "${injectKey}" non trovata nel workflow context`);
+      logger.warn(`[inject_context] "${injectKey}" is not a valid file path or workflow context key — skipping`);
       return baseContext;
     }
 
@@ -538,7 +546,7 @@ export class WorkflowRunner {
       const content = readFileSync(filePath, 'utf-8');
       return { ...baseContext, injectedContext: content };
     } catch {
-      logger.warn(`[inject_context] file "${filePath}" non trovato — skipping`);
+      logger.warn(`[inject_context] file "${filePath}" not found — skipping`);
       return baseContext;
     }
   }

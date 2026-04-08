@@ -84,25 +84,25 @@ program
       for (const err of result.errors) {
         console.log(
           chalk.red(
-            `❌ [${err.rule}]${err.phase ? ` [fase: ${err.phase}]` : ''}${err.agent ? ` [agente: ${err.agent}]` : ''} ${err.message}`,
+            `❌ [${err.rule}]${err.phase ? ` [phase: ${err.phase}]` : ''}${err.agent ? ` [agent: ${err.agent}]` : ''} ${err.message}`,
           ),
         );
       }
       for (const warn of result.warnings) {
         console.log(
           chalk.yellow(
-            `⚠️  [${warn.rule}]${warn.phase ? ` [fase: ${warn.phase}]` : ''}${warn.agent ? ` [agente: ${warn.agent}]` : ''} ${warn.message}`,
+            `⚠️  [${warn.rule}]${warn.phase ? ` [phase: ${warn.phase}]` : ''}${warn.agent ? ` [agent: ${warn.agent}]` : ''} ${warn.message}`,
           ),
         );
       }
 
       if (result.ok) {
-        const warnText = result.warnings.length > 0 ? ` — ${result.warnings.length} warning` : '';
-        console.log(chalk.green(`\n✅ Workflow valido${warnText}`));
+        const warnText = result.warnings.length > 0 ? ` — ${result.warnings.length} warning(s)` : '';
+        console.log(chalk.green(`\n✅ Workflow valid${warnText}`));
       } else {
         console.log(
           chalk.red(
-            `\n❌ Validazione fallita — ${result.errors.length} errori, ${result.warnings.length} warning`,
+            `\n❌ Validation failed — ${result.errors.length} error(s), ${result.warnings.length} warning(s)`,
           ),
         );
         process.exit(1);
@@ -127,34 +127,34 @@ program
       const phaseCount = w.phases.length;
       const loopInfo = w.loop
         ? `Loop: ${w.loop.id} (max ${w.loop.max_iterations ?? '?'} iter.)`
-        : 'nessun loop';
+        : 'no loop';
 
       console.log(chalk.bold(`\n📋 ${w.id}${w.version ? ` — v${w.version}` : ''}`));
       if (w.description) console.log(`   ${w.description}`);
-      console.log(`   Agenti: ${agentCount}  |  Fasi: ${phaseCount}  |  ${loopInfo}\n`);
+      console.log(`   Agents: ${agentCount}  |  Phases: ${phaseCount}  |  ${loopInfo}\n`);
 
       for (const err of result.errors) {
         console.log(
           chalk.red(
-            `❌ [${err.rule}]${err.phase ? ` [fase: ${err.phase}]` : ''}${err.agent ? ` [agente: ${err.agent}]` : ''} ${err.message}`,
+            `❌ [${err.rule}]${err.phase ? ` [phase: ${err.phase}]` : ''}${err.agent ? ` [agent: ${err.agent}]` : ''} ${err.message}`,
           ),
         );
       }
       for (const warn of result.warnings) {
         console.log(
           chalk.yellow(
-            `⚠️  [${warn.rule}]${warn.phase ? ` [fase: ${warn.phase}]` : ''}${warn.agent ? ` [agente: ${warn.agent}]` : ''} ${warn.message}`,
+            `⚠️  [${warn.rule}]${warn.phase ? ` [phase: ${warn.phase}]` : ''}${warn.agent ? ` [agent: ${warn.agent}]` : ''} ${warn.message}`,
           ),
         );
       }
 
       if (result.ok) {
-        const warnText = result.warnings.length > 0 ? ` — ${result.warnings.length} warning` : '';
-        console.log(chalk.green(`\n✅ Workflow valido${warnText}`));
+        const warnText = result.warnings.length > 0 ? ` — ${result.warnings.length} warning(s)` : '';
+        console.log(chalk.green(`\n✅ Workflow valid${warnText}`));
       } else {
         console.log(
           chalk.red(
-            `\n❌ Validazione fallita — ${result.errors.length} errori, ${result.warnings.length} warning`,
+            `\n❌ Validation failed — ${result.errors.length} error(s), ${result.warnings.length} warning(s)`,
           ),
         );
         process.exit(1);
@@ -202,10 +202,8 @@ program
     'Directory for phase output files (default: ./output/<workflow-id>)',
   )
   .action(async (file: string, options: { input?: string; mock?: boolean; outputDir?: string }) => {
-    // Guard: config mancante
     if (!existsSync('agentflow.config.json')) {
-      console.log(chalk.yellow('⚠️  agentflow.config.json non trovato. Esegui prima:'));
-      console.log(chalk.cyan('   npx tsx src/cli.ts init\n'));
+      console.log(chalk.yellow('⚠️  agentflow.config.json not found. Run first: agentflow init\n'));
       process.exit(1);
     }
 
@@ -345,5 +343,87 @@ program
       }
     },
   );
+
+// mcp-config command
+program
+  .command('mcp-config')
+  .description('Print the MCP config JSON to add to Claude Code settings')
+  .option('--workflows-dir <dir>', 'Directory containing .aflow files', process.cwd())
+  .action((options: { workflowsDir: string }) => {
+    const workflowsDir = resolve(options.workflowsDir);
+    const config = {
+      mcpServers: {
+        agentflow: {
+          command: 'npx',
+          args: ['-y', '--package=@anhonestboy/agentflow', 'agentflow-mcp'],
+          env: {
+            AGENTFLOW_WORKFLOWS_DIR: workflowsDir,
+            ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}',
+            OPENROUTER_API_KEY: '${OPENROUTER_API_KEY}',
+            OLLAMA_BASE_URL: 'http://localhost:11434',
+          },
+        },
+      },
+    };
+
+    console.log(chalk.bold('\n📋 Add this to ~/.claude/settings.json under "mcpServers":\n'));
+    console.log(JSON.stringify(config, null, 2));
+    console.log(chalk.dim('\nOr run: claude mcp add agentflow -- npx -y --package=@anhonestboy/agentflow agentflow-mcp\n'));
+  });
+
+// models command
+program
+  .command('models')
+  .description('List configured models and test connectivity')
+  .action(async () => {
+    if (!existsSync('agentflow.config.json')) {
+      console.log(chalk.yellow('⚠️  agentflow.config.json not found. Run first: agentflow init'));
+      process.exit(1);
+    }
+    const raw = readFileSync('agentflow.config.json', 'utf-8');
+    const config = JSON.parse(raw) as {
+      models: Record<string, { provider: string; model?: string }>;
+    };
+
+    console.log(chalk.bold('\n🤖 Configured models:\n'));
+    for (const [alias, cfg] of Object.entries(config.models)) {
+      const label = `${alias}`.padEnd(20);
+      const provider = cfg.provider.padEnd(12);
+      const model = cfg.model ?? '(auto)';
+      console.log(`   ${chalk.cyan(label)} ${chalk.dim(provider)} ${model}`);
+    }
+
+    // Connectivity checks
+    console.log(chalk.bold('\n🔌 Connectivity:\n'));
+
+    if (process.env.ANTHROPIC_API_KEY) {
+      console.log(`   ${chalk.green('✅')} Claude (ANTHROPIC_API_KEY set)`);
+    } else {
+      console.log(`   ${chalk.dim('○')}  Claude (ANTHROPIC_API_KEY not set)`);
+    }
+
+    if (process.env.OPENROUTER_API_KEY) {
+      console.log(`   ${chalk.green('✅')} OpenRouter (OPENROUTER_API_KEY set)`);
+    } else {
+      console.log(`   ${chalk.dim('○')}  OpenRouter (OPENROUTER_API_KEY not set)`);
+    }
+
+    try {
+      const ollamaBase = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+      const res = await fetch(`${ollamaBase}/api/tags`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        const data = (await res.json()) as { models: Array<{ name: string }> };
+        console.log(
+          `   ${chalk.green('✅')} Ollama (${data.models.length} models installed at ${ollamaBase})`,
+        );
+      } else {
+        console.log(`   ${chalk.yellow('⚠️')}  Ollama (response ${res.status})`);
+      }
+    } catch {
+      console.log(`   ${chalk.dim('○')}  Ollama (unreachable)`);
+    }
+
+    console.log();
+  });
 
 program.parse();

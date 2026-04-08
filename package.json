@@ -1,6 +1,6 @@
 {
-  "name": "agentflow",
-  "version": "0.1.0",
+  "name": "@anhonestboy/agentflow",
+  "version": "1.0.3",
   "description": "AgentFlow DSL — declarative language for multi-agent orchestration",
   "type": "module",
   "license": "MIT",
@@ -21,10 +21,17 @@
     "workflow"
   ],
   "bin": {
-    "agentflow": "./dist/cli.js"
+    "agentflow": "./bin/agentflow.js",
+    "agentflow-mcp": "./bin/agentflow-mcp.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./mcp": "./dist/mcp-server.js"
   },
   "files": [
+    "bin/",
     "dist/",
+    "examples/",
     "README.md",
     "LICENSE"
   ],
