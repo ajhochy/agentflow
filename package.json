@@ -1,13 +1,13 @@
 {
   "name": "@anhonestboy/agentflow",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "AgentFlow DSL — declarative language for multi-agent orchestration",
   "type": "module",
   "license": "MIT",
   "author": "anhonestboy",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anhonestboy/MCP-DSL.git"
+    "url": "git+https://github.com/anhonestboy/MCP-DSL.git"
   },
   "homepage": "https://github.com/anhonestboy/MCP-DSL#readme",
   "keywords": [
@@ -21,8 +21,8 @@
     "workflow"
   ],
   "bin": {
-    "agentflow": "./bin/agentflow.js",
-    "agentflow-mcp": "./bin/agentflow-mcp.js"
+    "agentflow": "bin/agentflow.js",
+    "agentflow-mcp": "bin/agentflow-mcp.js"
   },
   "exports": {
     ".": "./dist/index.js",
