@@ -26,7 +26,7 @@ export class ClaudeExecutor implements AgentExecutor {
     this.client = new Anthropic();
     this.toolRegistry = options?.toolRegistry;
     this.maxToolRounds =
-      options?.maxToolRounds ?? Number(process.env.AGENTFLOW_MAX_TOOL_ROUNDS) ?? 10;
+      options?.maxToolRounds ?? (Number(process.env.AGENTFLOW_MAX_TOOL_ROUNDS) || 10);
   }
 
   async execute(
