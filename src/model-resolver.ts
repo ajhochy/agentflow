@@ -62,7 +62,11 @@ function resolveAuto(): ModelConfig {
     const localSmart = config.models['local-smart'];
     return localSmart?.model
       ? { provider: 'ollama', model: localSmart.model, options: localSmart.options }
-      : { provider: 'ollama', model: process.env.OLLAMA_MODEL ?? 'qwen2.5:14b', options: { num_ctx: 4096 } };
+      : {
+          provider: 'ollama',
+          model: process.env.OLLAMA_MODEL ?? 'qwen2.5:14b',
+          options: { num_ctx: 4096 },
+        };
   }
   if (forced === 'claude' && process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-')) {
     return { provider: 'claude', model: 'claude-sonnet-4-5' };
