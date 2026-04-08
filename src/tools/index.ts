@@ -12,6 +12,55 @@ export interface Tool {
   execute(input: Record<string, unknown>): Promise<Record<string, unknown>>;
 }
 
+// ─── Test Runner Tool ──────────────────────────────────────────────
+
+export class TestRunnerTool implements Tool {
+  name = 'test_runner';
+  description = 'Esegue codice TypeScript in un file temporaneo e restituisce stdout, stderr e exit code.';
+  input_schema = {
+    type: 'object' as const,
+    properties: {
+      code: { type: 'string', description: 'Codice TypeScript da eseguire' },
+      timeout_ms: { type: 'number', description: 'Timeout in ms (default: 10000)' },
+    },
+    required: ['code'],
+  };
+
+  async execute(input: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const { writeFileSync: wfs, unlinkSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { randomUUID } = await import('node:crypto');
+
+    const code = String(input['code'] ?? '')
+    const timeout = Number(input['timeout_ms'] ?? 10000)
+    const tmpFile = `${tmpdir()}/agentflow-test-${randomUUID()}.ts`
+
+    try {
+      wfs(tmpFile, code, 'utf-8')
+      process.stderr.write(`  🧪 [test_runner] esecuzione...\n`)
+      const stdout = execSync(`npx tsx ${tmpFile}`, {
+        timeout,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      return { success: true, stdout: stdout.trim(), stderr: '', exit_code: 0 }
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; status?: number; message?: string }
+      return {
+        success: false,
+        stdout: e.stdout?.trim() ?? '',
+        stderr: (e.stderr?.trim() ?? e.message ?? 'Unknown error').slice(0, 1000),
+        exit_code: e.status ?? 1,
+      }
+    } finally {
+      try {
+        const { unlinkSync: rm } = await import('node:fs')
+        rm(tmpFile)
+      } catch { /* ignore */ }
+    }
+  }
+}
+
 // ─── Tool Registry ─────────────────────────────────────────────────
 
 export class ToolRegistry {
@@ -144,5 +193,6 @@ export function createBuiltinRegistry(workDir: string): ToolRegistry {
   registry.register(new FileWriteTool(workDir));
   registry.register(new FileReadTool(workDir));
   registry.register(new ShellExecTool(workDir));
+  registry.register(new TestRunnerTool());   // ← aggiunto
   return registry;
 }

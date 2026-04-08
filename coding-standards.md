@@ -1,41 +1,49 @@
 # Coding Standards
 
-## General
-
-- Use TypeScript with strict mode enabled
-- Prefer `const` over `let`; never use `var`
-- Use meaningful, descriptive names for variables and functions
-- Keep functions small and focused on a single responsibility
-- Handle errors explicitly; never silently swallow exceptions
+## TypeScript
+- Usa `const` per default, `let` solo se la variabile viene riassegnata; mai `var`
+- Tipizza sempre i parametri e il return type delle funzioni
+- Evita `any` — usa `unknown` se il tipo è incerto
+- Usa `type` per alias semplici, `interface` per oggetti estendibili
+- Niente `!` (non-null assertion) — gestisci sempre il caso null/undefined
 
 ## Style
+- Indentazione a 2 spazi
+- Single quotes per le stringhe
+- Trailing commas in array e oggetti multi-riga
+- Lunghezza massima riga: 100 caratteri
 
-- Use 2-space indentation
-- Use single quotes for strings
-- Add trailing commas in multi-line arrays and objects
-- Maximum line length: 100 characters
-
-## Functions
-
-- Prefer arrow functions for callbacks and short expressions
-- Use named functions for top-level declarations
-- Document public APIs with JSDoc when intent is not obvious from the signature
-
-## Testing
-
-- Write tests for all public functions
-- Use descriptive test names that explain the expected behavior
-- Cover edge cases: empty inputs, boundary values, error conditions
-- Keep tests independent and deterministic
+## Funzioni
+- Funzioni pure quando possibile (no side effects nascosti)
+- Max 20 righe per funzione — se è più lunga, spezza
+- Nomi descrittivi: `validateEmail` non `check` o `doStuff`
+- Un solo livello di astrazione per funzione
+- Arrow functions per callback ed espressioni brevi
 
 ## Error Handling
+- Mai ingoiare errori con `catch {}` vuoto
+- Usa errori tipizzati con messaggi chiari
+- Valida sempre gli input alle boundary (API, CLI, form)
+- Usa early return per ridurre il nesting
 
-- Throw typed errors with descriptive messages
-- Validate inputs at system boundaries (CLI args, API responses)
-- Use early returns to reduce nesting
+## Naming
+- camelCase per variabili e funzioni
+- PascalCase per classi e tipi
+- SCREAMING_SNAKE_CASE per costanti globali
+- Nomi in inglese
+
+## Testing
+- Ogni funzione pubblica deve avere almeno un test happy path e uno edge case
+- Testa i boundary: stringa vuota, null, valori estremi
+- Nomi test descrittivi: `it('returns false for email without @', ...)`
+
+## Code Quality
+- Niente codice commentato — usa git per la storia
+- Niente magic numbers — estrai costanti con nome
+- Importa solo ciò che usi
+- Ordine import: node built-in → third party → internal
 
 ## Security
-
-- Never commit secrets, API keys, or credentials
-- Validate and sanitize file paths before I/O operations
-- Use parameterized queries for any data store interactions
+- Mai committare segreti, API key o credenziali
+- Valida e sanitizza i path prima di operazioni I/O
+- Usa query parametrizzate per qualsiasi data store

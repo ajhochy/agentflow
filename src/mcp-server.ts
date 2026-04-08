@@ -1,10 +1,13 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { parse } from './parser.js';
 import { compile } from './compiler.js';
 import { validate } from './validate.js';
 import { WorkflowRunner, MockAgentExecutor } from './runtime.js';
+import { ClaudeExecutor } from './executors/claude-executor.js';
+import { OllamaExecutor } from './executors/ollama-executor.js';
+import { createBuiltinRegistry } from './tools/index.js';
 import type { WorkflowIR } from './types.js';
 
 // ─── Load workflows ─────────────────────────────────────────────────
@@ -171,8 +174,17 @@ async function main() {
             break;
           }
 
-          const executor = new MockAgentExecutor();
-          const runner = new WorkflowRunner(ir, executor);
+          const outputDir = resolve(`./output/${ir.workflow.id}`);
+          const toolRegistry = createBuiltinRegistry(outputDir);
+
+          const useClaude = !!process.env.ANTHROPIC_API_KEY;
+          const executor = useClaude
+            ? new ClaudeExecutor({ toolRegistry })
+            : new OllamaExecutor();
+
+          console.error(`[agentflow] Executor: ${useClaude ? 'Claude' : `Ollama (${process.env.OLLAMA_MODEL ?? 'gemma4:e4b'})`}`);
+
+          const runner = new WorkflowRunner(ir, executor, { outputDir });
           const instance = await runner.run(params.arguments ?? {});
 
           sendResponse(

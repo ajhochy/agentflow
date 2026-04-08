@@ -22,6 +22,7 @@ agentflow.config.json
 # misc
 .DS_Store
 *.pem
+dump.txt
 
 # debug logs
 npm-debug.log*

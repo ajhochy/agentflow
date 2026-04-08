@@ -1,21 +1,17 @@
 import type { AgentDef } from '../types.js';
 import type { AgentExecutor, ExecutionContext } from '../runtime.js';
 import type { ModelConfig } from '../model-resolver.js';
-import { withRetry } from '../retry.js';
 import { logger } from '../logger.js';
 
-const DEFAULT_BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL ?? 'gemma4:e4b';
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434'
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'qwen3:30b'
+const OLLAMA_TIMEOUT_MS = 5 * 60 * 1000 // 5 minuti
 
 export class OllamaExecutor implements AgentExecutor {
   private model: string;
-  private baseUrl: string;
-  private options: Record<string, unknown>;
 
-  constructor(modelConfig?: ModelConfig, baseUrl?: string) {
-    this.model = modelConfig?.model ?? DEFAULT_MODEL;
-    this.baseUrl = baseUrl ?? DEFAULT_BASE_URL;
-    this.options = (modelConfig?.options ?? {}) as Record<string, unknown>;
+  constructor(modelConfig?: ModelConfig) {
+    this.model = modelConfig?.model ?? OLLAMA_MODEL;
   }
 
   async execute(
@@ -27,13 +23,11 @@ export class OllamaExecutor implements AgentExecutor {
     const system = this.buildSystemPrompt(agent, context);
 
     // Separa i campi "codice" dagli altri
-    const codeFields = (agent.must_produce ?? []).filter((i) => i.name === 'code');
-    const textFields = (agent.must_produce ?? []).filter((i) => i.name !== 'code');
+    const codeFields = (agent.must_produce ?? []).filter(i => i.name === 'code')
+    const textFields = (agent.must_produce ?? []).filter(i => i.name !== 'code')
 
-    // Chiama il modello per i campi testuali
-    const textOutput = await this.fetchJson(agent, system, input, textFields);
+    const textOutput = await this.fetchJson(agent, system, input, textFields)
 
-    // Se c'è un campo code, chiama separatamente in plain text
     if (codeFields.length > 0) {
       const code = await this.fetchCode(agent, system, input);
       textOutput['code'] = code;
@@ -41,6 +35,26 @@ export class OllamaExecutor implements AgentExecutor {
 
     return this.normalizeOutput(textOutput);
   }
+
+  private async fetchWithTimeout(url: string, body: unknown): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS)
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!response.ok) {
+      const errBody = await response.text()
+      process.stderr.write(`  ❌ Ollama ${response.status}: ${errBody.slice(0, 500)}\n`)
+    }
+    return response
+  } finally {
+    clearTimeout(timeout)
+  }
+}
 
   private async fetchJson(
     agent: AgentDef,
@@ -53,32 +67,21 @@ export class OllamaExecutor implements AgentExecutor {
     const safeFields = fields.filter((f) => f.name !== 'code');
     const fieldList = safeFields.map((i) => `"${i.name}": "<${i.type ?? 'string'}>"`).join(',\n  ');
 
-    const response = await withRetry(
-      () =>
-        fetch(`${this.baseUrl}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: this.model,
-            stream: false,
-            format: 'json',
-            options: { temperature: 0, ...this.options },
-            messages: [
-              { role: 'system', content: system },
-              {
-                role: 'user',
-                content: `Input:\n${JSON.stringify(input, null, 2)}\n\nDevi produrre ESATTAMENTE questi campi JSON, nessuno di più, nessuno di meno:\n{\n  ${fieldList}\n}\n\nIMPORTANTE: rispondi SOLO con questi campi esatti. Non aggiungere "verdict" o altri campi non richiesti.`,
-              },
-            ],
-          }),
-        }),
-      `${agent.id}/ollama-chat`,
-    );
+    const response = await this.fetchWithTimeout(`${OLLAMA_BASE_URL}/api/chat`, {
+      model: OLLAMA_MODEL,
+      stream: false,
+      format: 'json',
+      keep_alive: '10m',
+      options: { temperature: 0, think: false, num_ctx: 4096 },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRispondi con JSON con questi campi:\n{\n  ${fieldList}\n}\n\nNOTA: verdict deve essere ESATTAMENTE "approved" oppure "needs_work"` },
+      ],
+    })
 
     logger.debug(`[${agent.id}] fetchJson risposta ricevuta`);
 
-    if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
-    const data = (await response.json()) as { message: { content: string } };
+    const data = await response.json() as { message: { content: string } }
 
     try {
       const parsed = JSON.parse(data.message.content);
@@ -124,52 +127,31 @@ export class OllamaExecutor implements AgentExecutor {
   ): Promise<string> {
     logger.debug(`[${agent.id}] fetchCode...`);
 
-    const response = await withRetry(
-      () =>
-        fetch(`${this.baseUrl}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: this.model,
-            stream: false,
-            format: 'json',
-            options: { temperature: 0, ...this.options },
-            messages: [
-              { role: 'system', content: system },
-              {
-                role: 'user',
-                content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRispondi con JSON: { "code": "<codice TypeScript completo>" }\nIl campo code deve contenere SOLO il codice, niente altro.`,
-              },
-            ],
-          }),
-        }),
-      `${agent.id}/ollama-code`,
-    );
+    const response = await this.fetchWithTimeout(`${OLLAMA_BASE_URL}/api/chat`, {
+      model: OLLAMA_MODEL,
+      stream: false,
+      keep_alive: '10m',
+      options: { temperature: 0, think: false, num_ctx: 4096 },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRispondi con un blocco di codice TypeScript:\n\`\`\`typescript\n// il tuo codice qui\n\`\`\`` },
+      ],
+    })
 
     logger.debug(`[${agent.id}] fetchCode risposta ricevuta`);
 
-    if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
-    const data = (await response.json()) as { message: { content: string } };
+    const data = await response.json() as { message: { content: string } }
+    const content = data.message.content
 
-    try {
-      const parsed = JSON.parse(data.message.content);
-      if (typeof parsed === 'object' && parsed !== null) {
-        const code =
-          parsed.code ??
-          parsed.implementation ??
-          parsed.typescript ??
-          Object.values(parsed).find(
-            (v) => typeof v === 'string' && (v.includes('=>') || v.includes('function')),
-          );
-        if (code) return String(code);
-      }
-      return data.message.content;
-    } catch {
-      return data.message.content
-        .replace(/^```[\w]*\n?/, '')
-        .replace(/\n?```$/, '')
-        .trim();
-    }
+    // Estrai blocco ```typescript ... ``` o ``` ... ```
+    const match = content.match(/```(?:typescript|ts)?\n([\s\S]*?)```/)
+    if (match) return match[1].trim()
+
+    // Fallback: pulizia manuale
+    return content
+      .replace(/^```[\w]*\n?/, '')
+      .replace(/\n?```$/, '')
+      .trim()
   }
 
   private buildSystemPrompt(agent: AgentDef, context?: ExecutionContext): string {
@@ -193,10 +175,8 @@ export class OllamaExecutor implements AgentExecutor {
     }
 
     if (context?.loop) {
-      const lc = context.loop;
-      lines.push(
-        `Iterazione ${lc.iteration} di un loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`,
-      );
+      const lc = context.loop
+      lines.push(`Iterazione ${lc.iteration} di un loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`)
       if (lc.acceptance_criteria) {
         lines.push(`Criteri di accettazione: ${lc.acceptance_criteria}`);
       }
@@ -217,11 +197,31 @@ export class OllamaExecutor implements AgentExecutor {
   }
 
   private normalizeOutput(output: Record<string, unknown>): Record<string, unknown> {
-    // Normalizza verdict a lowercase con underscore
     if (typeof output['verdict'] === 'string') {
       const v = output['verdict'].toLowerCase().replace(/\s+/g, '_');
       output['verdict'] = v.includes('approv') ? 'approved' : 'needs_work';
     }
-    return output;
+
+    if (output['confidence'] !== undefined) {
+      const raw = output['confidence']
+      if (typeof raw === 'string') {
+        const normalized = raw.replace(',', '.').trim()
+        const parsed = parseFloat(normalized)
+        if (!isNaN(parsed)) {
+          output['confidence'] = Math.min(1, Math.max(0, parsed))
+        } else {
+          const wordMap: Record<string, number> = {
+            'alta': 0.9, 'alto': 0.9, 'high': 0.9,
+            'media': 0.6, 'medio': 0.6, 'medium': 0.6,
+            'bassa': 0.3, 'basso': 0.3, 'low': 0.3,
+          }
+          output['confidence'] = wordMap[normalized.toLowerCase()] ?? 0.5
+        }
+      } else if (typeof raw === 'number') {
+        output['confidence'] = raw > 1 ? raw / 100 : raw
+      }
+    }
+
+    return output
   }
 }
