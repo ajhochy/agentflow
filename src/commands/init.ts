@@ -1,6 +1,6 @@
-import { writeFileSync, existsSync, readFileSync, appendFileSync, mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { writeFileSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { execSync } from 'node:child_process';
 import { select, input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import 'dotenv/config';
@@ -150,42 +150,30 @@ function buildModelChoices(models: ORModel[], defaultId: string) {
   );
 }
 
-// ── Claude Code settings helper ──────────────────────────────────────
+// ── Claude Code MCP registration ─────────────────────────────────────
 
-function writeClaudeSettings(opts: {
+function registerMcpServer(opts: {
   anthropicKey?: string;
   openrouterKey?: string;
   workflowsDir: string;
 }): void {
-  const settingsPath = join(homedir(), '.claude', 'settings.json');
-  const claudeDir = join(homedir(), '.claude');
-
-  if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true });
-
-  let settings: Record<string, unknown> = {};
-  if (existsSync(settingsPath)) {
-    try {
-      settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-    } catch {
-      // file corrotto: partiamo da oggetto vuoto
-    }
+  // Rimuove la registrazione esistente se presente
+  try {
+    execSync('claude mcp remove agentflow', { stdio: 'ignore' });
+  } catch {
+    // non esisteva, ignorato
   }
 
-  const env: Record<string, string> = {
-    AGENTFLOW_WORKFLOWS_DIR: opts.workflowsDir,
-    OLLAMA_BASE_URL: 'http://localhost:11434',
-  };
-  if (opts.anthropicKey) env['ANTHROPIC_API_KEY'] = opts.anthropicKey;
-  if (opts.openrouterKey) env['OPENROUTER_API_KEY'] = opts.openrouterKey;
+  const envFlags: string[] = [
+    `-e AGENTFLOW_WORKFLOWS_DIR=${opts.workflowsDir}`,
+    `-e AGENTFLOW_DEFAULT_PROVIDER=${opts.openrouterKey ? 'openrouter' : opts.anthropicKey ? 'claude' : 'ollama'}`,
+    `-e OLLAMA_BASE_URL=http://localhost:11434`,
+  ];
+  if (opts.openrouterKey) envFlags.push(`-e OPENROUTER_API_KEY=${opts.openrouterKey}`);
+  if (opts.anthropicKey) envFlags.push(`-e ANTHROPIC_API_KEY=${opts.anthropicKey}`);
 
-  if (!settings['mcpServers']) settings['mcpServers'] = {};
-  (settings['mcpServers'] as Record<string, unknown>)['agentflow'] = {
-    command: 'agentflow-mcp',
-    args: [],
-    env,
-  };
-
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+  const cmd = `claude mcp add agentflow ${envFlags.join(' ')} -- agentflow-mcp`;
+  execSync(cmd, { stdio: 'ignore' });
 }
 
 // ── .env helper ──────────────────────────────────────────────────────
@@ -433,26 +421,24 @@ export async function runInit(): Promise<void> {
   console.log(chalk.green('✅ .gitignore updated'));
 
   // ── 11. Claude Code MCP setup ────────────────────────────────────
-  const claudeSettingsPath = join(homedir(), '.claude', 'settings.json');
-  const claudeExists = existsSync(claudeSettingsPath);
-
   const configureClaude = await confirm({
-    message: claudeExists
-      ? 'Configure AgentFlow as MCP server in Claude Code automatically?'
-      : 'Create ~/.claude/settings.json and configure AgentFlow as MCP server?',
+    message: 'Register AgentFlow as MCP server in Claude Code automatically?',
     default: true,
   });
 
   if (configureClaude) {
-    writeClaudeSettings({
-      anthropicKey: anthropicKey || undefined,
-      openrouterKey: openrouterKey || undefined,
-      workflowsDir: resolve(process.cwd()),
-    });
-    console.log(chalk.green('✅ ~/.claude/settings.json updated'));
-    console.log(chalk.yellow('\n⚠️  Required: install agentflow globally so Claude Code can find the binary:'));
-    console.log(chalk.cyan('   npm install -g @anhonestboy/agentflow@latest'));
-    console.log(chalk.dim('   Then restart Claude Code to activate the AgentFlow MCP server.'));
+    try {
+      registerMcpServer({
+        anthropicKey: anthropicKey || undefined,
+        openrouterKey: openrouterKey || undefined,
+        workflowsDir: resolve(process.cwd()),
+      });
+      console.log(chalk.green('✅ AgentFlow registered in Claude Code (claude mcp add)'));
+      console.log(chalk.dim('   Restart Claude Code to activate the MCP server.'));
+    } catch {
+      console.log(chalk.yellow('⚠️  Could not run "claude mcp add" automatically.'));
+      console.log(chalk.dim('   Run manually: agentflow mcp-config'));
+    }
   } else {
     console.log(chalk.dim('\n   To configure Claude Code manually, run: agentflow mcp-config'));
   }
