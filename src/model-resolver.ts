@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 export type ModelConfig = {
   provider: 'claude' | 'ollama' | 'openrouter';
@@ -13,43 +14,67 @@ type ConfigFile = {
 
 let _config: ConfigFile | null = null;
 
+const FALLBACK_CONFIG: ConfigFile = {
+  models: {
+    auto: { provider: 'auto' },
+    'claude-sonnet': { provider: 'claude', model: 'claude-sonnet-4-5' },
+    'claude-opus': { provider: 'claude', model: 'claude-opus-4-5' },
+    'local-fast': { provider: 'ollama', model: 'qwen3.5:9b', options: { num_ctx: 2048 } },
+    'local-smart': { provider: 'ollama', model: 'qwen2.5:14b', options: { num_ctx: 4096 } },
+    'openrouter-smart': { provider: 'openrouter', model: 'google/gemini-2.5-pro' },
+    'openrouter-free': { provider: 'openrouter', model: 'meta-llama/llama-3.3-8b-instruct:free' },
+  },
+};
+
 function loadConfig(): ConfigFile {
   if (_config) return _config;
-  try {
-    const raw = readFileSync('agentflow.config.json', 'utf-8');
-    _config = JSON.parse(raw) as ConfigFile;
-    return _config;
-  } catch {
-    _config = {
-      models: {
-        auto: { provider: 'auto' },
-        'claude-sonnet': { provider: 'claude', model: 'claude-sonnet-4-5' },
-        'claude-opus': { provider: 'claude', model: 'claude-opus-4-5' },
-        'local-fast': { provider: 'ollama', model: 'qwen3.5:9b', options: { num_ctx: 2048 } },
-        'local-smart': { provider: 'ollama', model: 'qwen2.5:14b', options: { num_ctx: 4096 } },
-        'openrouter-smart': { provider: 'openrouter', model: 'google/gemini-2.5-pro' },
-        'openrouter-free': {
-          provider: 'openrouter',
-          model: 'meta-llama/llama-3.3-8b-instruct:free',
-        },
-      },
-    };
-    return _config;
+
+  // Cerca in CWD, poi in AGENTFLOW_WORKFLOWS_DIR
+  const candidates = ['agentflow.config.json'];
+  const workflowsDir = process.env.AGENTFLOW_WORKFLOWS_DIR;
+  if (workflowsDir) candidates.push(join(workflowsDir, 'agentflow.config.json'));
+
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      try {
+        _config = JSON.parse(readFileSync(path, 'utf-8')) as ConfigFile;
+        return _config;
+      } catch {
+        // file corrotto, prova il prossimo
+      }
+    }
   }
+
+  _config = FALLBACK_CONFIG;
+  return _config;
 }
 
 function resolveAuto(): ModelConfig {
   const config = loadConfig();
 
-  if (process.env.ANTHROPIC_API_KEY?.trim()) {
+  // Rispetta provider esplicito se configurato
+  const forced = process.env.AGENTFLOW_DEFAULT_PROVIDER?.trim();
+  if (forced === 'openrouter' && process.env.OPENROUTER_API_KEY?.trim()) {
+    const orSmart = config.models['openrouter-smart'];
+    return { provider: 'openrouter', model: orSmart?.model ?? 'google/gemini-2.5-pro' };
+  }
+  if (forced === 'ollama') {
+    const localSmart = config.models['local-smart'];
+    return localSmart?.model
+      ? { provider: 'ollama', model: localSmart.model, options: localSmart.options }
+      : { provider: 'ollama', model: process.env.OLLAMA_MODEL ?? 'qwen2.5:14b', options: { num_ctx: 4096 } };
+  }
+  if (forced === 'claude' && process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-')) {
+    return { provider: 'claude', model: 'claude-sonnet-4-5' };
+  }
+
+  // Autodetect: solo chiavi Anthropic reali (sk-ant-...) per evitare token di sessione
+  if (process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-')) {
     return { provider: 'claude', model: 'claude-sonnet-4-5' };
   }
   if (process.env.OPENROUTER_API_KEY?.trim()) {
     const orSmart = config.models['openrouter-smart'];
-    return {
-      provider: 'openrouter',
-      model: orSmart?.model ?? 'google/gemini-2.5-pro',
-    };
+    return { provider: 'openrouter', model: orSmart?.model ?? 'google/gemini-2.5-pro' };
   }
   const localSmart = config.models['local-smart'];
   if (localSmart?.provider === 'ollama' && localSmart.model) {
