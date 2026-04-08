@@ -16,11 +16,12 @@ export interface Tool {
 
 export class TestRunnerTool implements Tool {
   name = 'test_runner';
-  description = 'Esegue codice TypeScript in un file temporaneo e restituisce stdout, stderr e exit code.';
+  description =
+    'Executes TypeScript code in a temporary file and returns stdout, stderr, and exit code.';
   input_schema = {
     type: 'object' as const,
     properties: {
-      code: { type: 'string', description: 'Codice TypeScript da eseguire' },
+      code: { type: 'string', description: 'TypeScript code to execute' },
       timeout_ms: { type: 'number', description: 'Timeout in ms (default: 10000)' },
     },
     required: ['code'],
@@ -31,32 +32,34 @@ export class TestRunnerTool implements Tool {
     const { tmpdir } = await import('node:os');
     const { randomUUID } = await import('node:crypto');
 
-    const code = String(input['code'] ?? '')
-    const timeout = Number(input['timeout_ms'] ?? 10000)
-    const tmpFile = `${tmpdir()}/agentflow-test-${randomUUID()}.ts`
+    const code = String(input['code'] ?? '');
+    const timeout = Number(input['timeout_ms'] ?? 10000);
+    const tmpFile = `${tmpdir()}/agentflow-test-${randomUUID()}.ts`;
 
     try {
-      wfs(tmpFile, code, 'utf-8')
-      process.stderr.write(`  🧪 [test_runner] esecuzione...\n`)
+      wfs(tmpFile, code, 'utf-8');
+      process.stderr.write(`  🧪 [test_runner] running...\n`);
       const stdout = execSync(`npx tsx ${tmpFile}`, {
         timeout,
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe'],
-      })
-      return { success: true, stdout: stdout.trim(), stderr: '', exit_code: 0 }
+      });
+      return { success: true, stdout: stdout.trim(), stderr: '', exit_code: 0 };
     } catch (err: unknown) {
-      const e = err as { stdout?: string; stderr?: string; status?: number; message?: string }
+      const e = err as { stdout?: string; stderr?: string; status?: number; message?: string };
       return {
         success: false,
         stdout: e.stdout?.trim() ?? '',
         stderr: (e.stderr?.trim() ?? e.message ?? 'Unknown error').slice(0, 1000),
         exit_code: e.status ?? 1,
-      }
+      };
     } finally {
       try {
-        const { unlinkSync: rm } = await import('node:fs')
-        rm(tmpFile)
-      } catch { /* ignore */ }
+        const { unlinkSync: rm } = await import('node:fs');
+        rm(tmpFile);
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
@@ -193,6 +196,6 @@ export function createBuiltinRegistry(workDir: string): ToolRegistry {
   registry.register(new FileWriteTool(workDir));
   registry.register(new FileReadTool(workDir));
   registry.register(new ShellExecTool(workDir));
-  registry.register(new TestRunnerTool());   // ← aggiunto
+  registry.register(new TestRunnerTool());
   return registry;
 }

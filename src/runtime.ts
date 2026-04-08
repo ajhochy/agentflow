@@ -295,7 +295,7 @@ export class WorkflowRunner {
       instance.loop_iterations[loop.id] = iteration;
 
       // Set iteration on mock executor if applicable
-      // Prova con il primo agente del loop per controllare se è un MockAgentExecutor
+      // Try with the first agent in the loop to check if it's a MockAgentExecutor
       const firstLoopAgent = this.ir.workflow.agents[loopPhases[0]?.agent];
       if (firstLoopAgent) {
         const testExecutor = this.resolveExecutor(firstLoopAgent);
@@ -312,7 +312,7 @@ export class WorkflowRunner {
         }
         instance.phase_states[phase.id] = 'pending';
 
-        // Inietta il feedback del loop come input extra
+        // Inject loop feedback as extra input
         if (
           iteration > 1 &&
           loop.on_each_iteration &&
@@ -398,7 +398,7 @@ export class WorkflowRunner {
       }
     }
 
-    // Inietta feedback loop se presente per questa fase
+    // Inject loop feedback if present for this phase
     if (phaseId && instance.loop_feedback?.[phaseId]) {
       result['feedback'] = instance.loop_feedback[phaseId];
       result['improvement_list'] = instance.loop_feedback[phaseId];
@@ -538,7 +538,9 @@ export class WorkflowRunner {
     const filePath = workflowContext?.[injectKey];
 
     if (typeof filePath !== 'string') {
-      logger.warn(`[inject_context] "${injectKey}" is not a valid file path or workflow context key — skipping`);
+      logger.warn(
+        `[inject_context] "${injectKey}" is not a valid file path or workflow context key — skipping`,
+      );
       return baseContext;
     }
 
