@@ -180,8 +180,8 @@ function writeClaudeSettings(opts: {
 
   if (!settings['mcpServers']) settings['mcpServers'] = {};
   (settings['mcpServers'] as Record<string, unknown>)['agentflow'] = {
-    command: 'npx',
-    args: ['-y', '--package=@anhonestboy/agentflow', 'agentflow-mcp'],
+    command: 'agentflow-mcp',
+    args: [],
     env,
   };
 
@@ -450,7 +450,9 @@ export async function runInit(): Promise<void> {
       workflowsDir: resolve(process.cwd()),
     });
     console.log(chalk.green('✅ ~/.claude/settings.json updated'));
-    console.log(chalk.dim('   Restart Claude Code to activate the AgentFlow MCP server.'));
+    console.log(chalk.yellow('\n⚠️  Required: install agentflow globally so Claude Code can find the binary:'));
+    console.log(chalk.cyan('   npm install -g @anhonestboy/agentflow@latest'));
+    console.log(chalk.dim('   Then restart Claude Code to activate the AgentFlow MCP server.'));
   } else {
     console.log(chalk.dim('\n   To configure Claude Code manually, run: agentflow mcp-config'));
   }
