@@ -1,6 +1,6 @@
 import { writeFileSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { select, input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import 'dotenv/config';
@@ -157,23 +157,30 @@ function registerMcpServer(opts: {
   openrouterKey?: string;
   workflowsDir: string;
 }): void {
-  // Rimuove la registrazione esistente se presente
-  try {
-    execSync('claude mcp remove agentflow', { stdio: 'ignore' });
-  } catch {
-    // non esisteva, ignorato
-  }
+  const defaultProvider = opts.openrouterKey ? 'openrouter' : opts.anthropicKey ? 'claude' : 'ollama';
 
-  const envFlags: string[] = [
-    `-e AGENTFLOW_WORKFLOWS_DIR=${opts.workflowsDir}`,
-    `-e AGENTFLOW_DEFAULT_PROVIDER=${opts.openrouterKey ? 'openrouter' : opts.anthropicKey ? 'claude' : 'ollama'}`,
-    `-e OLLAMA_BASE_URL=http://localhost:11434`,
+  // Rimuove la registrazione esistente se presente (-s user = globale)
+  spawnSync('claude', ['mcp', 'remove', 'agentflow', '-s', 'user'], { stdio: 'ignore' });
+
+  // Costruisce i -e KEY=VALUE come array separato (gestisce spazi nei valori)
+  const envArgs: string[] = [
+    '-e', `AGENTFLOW_WORKFLOWS_DIR=${opts.workflowsDir}`,
+    '-e', `AGENTFLOW_DEFAULT_PROVIDER=${defaultProvider}`,
+    '-e', 'OLLAMA_BASE_URL=http://localhost:11434',
   ];
-  if (opts.openrouterKey) envFlags.push(`-e OPENROUTER_API_KEY=${opts.openrouterKey}`);
-  if (opts.anthropicKey) envFlags.push(`-e ANTHROPIC_API_KEY=${opts.anthropicKey}`);
+  if (opts.openrouterKey) envArgs.push('-e', `OPENROUTER_API_KEY=${opts.openrouterKey}`);
+  if (opts.anthropicKey) envArgs.push('-e', `ANTHROPIC_API_KEY=${opts.anthropicKey}`);
 
-  const cmd = `claude mcp add agentflow ${envFlags.join(' ')} -- agentflow-mcp`;
-  execSync(cmd, { stdio: 'ignore' });
+  // -s user = scope globale (funziona in tutti i progetti)
+  const result = spawnSync(
+    'claude',
+    ['mcp', 'add', '-s', 'user', ...envArgs, 'agentflow', '--', 'agentflow-mcp'],
+    { stdio: 'pipe', encoding: 'utf-8' },
+  );
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || 'claude mcp add failed');
+  }
 }
 
 // ── .env helper ──────────────────────────────────────────────────────
