@@ -157,16 +157,23 @@ function registerMcpServer(opts: {
   openrouterKey?: string;
   workflowsDir: string;
 }): void {
-  const defaultProvider = opts.openrouterKey ? 'openrouter' : opts.anthropicKey ? 'claude' : 'ollama';
+  const defaultProvider = opts.openrouterKey
+    ? 'openrouter'
+    : opts.anthropicKey
+      ? 'claude'
+      : 'ollama';
 
   // Remove existing registration if present (-s user = global)
   spawnSync('claude', ['mcp', 'remove', 'agentflow', '-s', 'user'], { stdio: 'ignore' });
 
   // Build -e KEY=VALUE as separate array entries (handles spaces in values)
   const envArgs: string[] = [
-    '-e', `AGENTFLOW_WORKFLOWS_DIR=${opts.workflowsDir}`,
-    '-e', `AGENTFLOW_DEFAULT_PROVIDER=${defaultProvider}`,
-    '-e', 'OLLAMA_BASE_URL=http://localhost:11434',
+    '-e',
+    `AGENTFLOW_WORKFLOWS_DIR=${opts.workflowsDir}`,
+    '-e',
+    `AGENTFLOW_DEFAULT_PROVIDER=${defaultProvider}`,
+    '-e',
+    'OLLAMA_BASE_URL=http://localhost:11434',
   ];
   if (opts.openrouterKey) envArgs.push('-e', `OPENROUTER_API_KEY=${opts.openrouterKey}`);
   if (opts.anthropicKey) envArgs.push('-e', `ANTHROPIC_API_KEY=${opts.anthropicKey}`);

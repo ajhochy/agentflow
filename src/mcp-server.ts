@@ -210,9 +210,12 @@ async function main() {
             const cfg = resolveModel(agent.model);
             console.error(`[agentflow] [${agent.id}] ${cfg.provider}/${cfg.model}`);
             switch (cfg.provider) {
-              case 'claude': return new ClaudeExecutor({ toolRegistry });
-              case 'openrouter': return new OpenRouterExecutor(cfg.model);
-              default: return new OllamaExecutor(cfg);
+              case 'claude':
+                return new ClaudeExecutor({ toolRegistry });
+              case 'openrouter':
+                return new OpenRouterExecutor(cfg.model);
+              default:
+                return new OllamaExecutor(cfg);
             }
           };
 

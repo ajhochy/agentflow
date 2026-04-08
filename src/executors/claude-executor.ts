@@ -147,8 +147,7 @@ export class ClaudeExecutor implements AgentExecutor {
     if (modeMap[agent.mode]) lines.push(modeMap[agent.mode]);
     if (agent.constraints?.length)
       lines.push(`\nConstraints:\n${agent.constraints.map((c) => `- ${c}`).join('\n')}`);
-    if (agent.rules?.length)
-      lines.push(`\nRules:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
+    if (agent.rules?.length) lines.push(`\nRules:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
 
     // Inform Claude about available tools
     if (agent.tools?.length) {
@@ -158,9 +157,7 @@ export class ClaudeExecutor implements AgentExecutor {
 
     // Inject rules/context file content
     if (context?.injectedContext) {
-      lines.push(
-        `\n--- Project context ---\n${context.injectedContext}\n--- End context ---`,
-      );
+      lines.push(`\n--- Project context ---\n${context.injectedContext}\n--- End context ---`);
     }
 
     // Inject loop context with acceptance criteria
@@ -177,9 +174,7 @@ export class ClaudeExecutor implements AgentExecutor {
       }
     }
 
-    lines.push(
-      '\nWhen you have completed the work, call produce_output with all required fields.',
-    );
+    lines.push('\nWhen you have completed the work, call produce_output with all required fields.');
 
     return lines.join('\n');
   }

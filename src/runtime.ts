@@ -538,7 +538,9 @@ export class WorkflowRunner {
     const filePath = workflowContext?.[injectKey];
 
     if (typeof filePath !== 'string') {
-      logger.warn(`[inject_context] "${injectKey}" is not a valid file path or workflow context key — skipping`);
+      logger.warn(
+        `[inject_context] "${injectKey}" is not a valid file path or workflow context key — skipping`,
+      );
       return baseContext;
     }
 

@@ -108,7 +108,8 @@ program
       }
 
       if (result.ok) {
-        const warnText = result.warnings.length > 0 ? ` — ${result.warnings.length} warning(s)` : '';
+        const warnText =
+          result.warnings.length > 0 ? ` — ${result.warnings.length} warning(s)` : '';
         console.log(chalk.green(`\n✅ Workflow valid${warnText}`));
       } else {
         console.log(
@@ -160,7 +161,8 @@ program
       }
 
       if (result.ok) {
-        const warnText = result.warnings.length > 0 ? ` — ${result.warnings.length} warning(s)` : '';
+        const warnText =
+          result.warnings.length > 0 ? ` — ${result.warnings.length} warning(s)` : '';
         console.log(chalk.green(`\n✅ Workflow valid${warnText}`));
       } else {
         console.log(
@@ -377,8 +379,10 @@ program
       AGENTFLOW_WORKFLOWS_DIR: workflowsDir,
       OLLAMA_BASE_URL: 'http://localhost:11434',
     };
-    if (process.env['ANTHROPIC_API_KEY']) env['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
-    if (process.env['OPENROUTER_API_KEY']) env['OPENROUTER_API_KEY'] = process.env['OPENROUTER_API_KEY'];
+    if (process.env['ANTHROPIC_API_KEY'])
+      env['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
+    if (process.env['OPENROUTER_API_KEY'])
+      env['OPENROUTER_API_KEY'] = process.env['OPENROUTER_API_KEY'];
 
     const config = {
       mcpServers: {
