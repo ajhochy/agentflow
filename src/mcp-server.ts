@@ -85,6 +85,14 @@ function makeError(id: number | string | null, code: number, message: string): J
 
 async function main() {
   const workflowsDir = process.env.AGENTFLOW_WORKFLOWS_DIR || './examples';
+
+  // Diagnostica env vars al startup
+  const orKey = process.env.OPENROUTER_API_KEY?.trim();
+  const antKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const defProvider = process.env.AGENTFLOW_DEFAULT_PROVIDER;
+  console.error(`[agentflow] ENV OPENROUTER_API_KEY: ${orKey ? orKey.slice(0, 12) + '...' : '(missing)'}`);
+  console.error(`[agentflow] ENV ANTHROPIC_API_KEY:  ${antKey ? (antKey.startsWith('sk-ant-') ? antKey.slice(0, 12) + '...' : '(session token, ignored)') : '(missing)'}`);
+  console.error(`[agentflow] ENV AGENTFLOW_DEFAULT_PROVIDER: ${defProvider ?? '(not set)'}`);
   console.error(`[agentflow] Loading workflows from: ${workflowsDir}`);
 
   const workflows = loadWorkflows(workflowsDir);

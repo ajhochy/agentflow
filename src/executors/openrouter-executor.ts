@@ -11,10 +11,11 @@ export class OpenRouterExecutor implements AgentExecutor {
   private model: string;
 
   constructor(model: string) {
-    if (!process.env.OPENROUTER_API_KEY) {
+    const key = process.env.OPENROUTER_API_KEY?.trim() ?? '';
+    if (!key) {
       throw new Error('OPENROUTER_API_KEY non impostata');
     }
-    this.apiKey = process.env.OPENROUTER_API_KEY;
+    this.apiKey = key;
     this.model = model;
   }
 
