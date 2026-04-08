@@ -171,10 +171,10 @@ function registerMcpServer(opts: {
   if (opts.openrouterKey) envArgs.push('-e', `OPENROUTER_API_KEY=${opts.openrouterKey}`);
   if (opts.anthropicKey) envArgs.push('-e', `ANTHROPIC_API_KEY=${opts.anthropicKey}`);
 
-  // -s user = scope globale (funziona in tutti i progetti)
+  // nome prima delle opzioni, -s user = scope globale
   const result = spawnSync(
     'claude',
-    ['mcp', 'add', '-s', 'user', ...envArgs, 'agentflow', '--', 'agentflow-mcp'],
+    ['mcp', 'add', 'agentflow', '-s', 'user', ...envArgs, '--', 'agentflow-mcp'],
     { stdio: 'pipe', encoding: 'utf-8' },
   );
 
