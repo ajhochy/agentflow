@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { parse } from './parser.js';
@@ -100,13 +100,17 @@ async function main() {
     console.error(`[agentflow] Loaded .env from: ${dotenvPath}`);
   }
 
-  // Diagnostica env vars al startup
-  const orKey = process.env.OPENROUTER_API_KEY?.trim();
-  const antKey = process.env.ANTHROPIC_API_KEY?.trim();
-  const defProvider = process.env.AGENTFLOW_DEFAULT_PROVIDER;
-  console.error(`[agentflow] ENV OPENROUTER_API_KEY: ${orKey ? orKey.slice(0, 12) + '...' : '(missing)'}`);
-  console.error(`[agentflow] ENV ANTHROPIC_API_KEY:  ${antKey ? (antKey.startsWith('sk-ant-') ? antKey.slice(0, 12) + '...' : '(session token, ignored)') : '(missing)'}`);
-  console.error(`[agentflow] ENV AGENTFLOW_DEFAULT_PROVIDER: ${defProvider ?? '(not set)'}`);
+  // Scrivi log di diagnostica su file (leggibile anche quando stderr non è visibile)
+  const debugLog = [
+    `[${new Date().toISOString()}] agentflow-mcp startup`,
+    `AGENTFLOW_WORKFLOWS_DIR: ${workflowsDir}`,
+    `AGENTFLOW_DEFAULT_PROVIDER: ${process.env.AGENTFLOW_DEFAULT_PROVIDER ?? '(not set)'}`,
+    `OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? process.env.OPENROUTER_API_KEY.slice(0, 16) + '...' : '(missing)'}`,
+    `ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? (process.env.ANTHROPIC_API_KEY.startsWith('sk-ant-') ? 'real key' : 'session token') : '(missing)'}`,
+    `dotenv path: ${join(workflowsDir, '.env')} exists=${existsSync(join(workflowsDir, '.env'))}`,
+  ].join('\n');
+  writeFileSync('/tmp/agentflow-mcp-debug.log', debugLog + '\n');
+
   console.error(`[agentflow] Loading workflows from: ${workflowsDir}`);
 
   const workflows = loadWorkflows(workflowsDir);
