@@ -41,10 +41,10 @@ function loadConfig(): ConfigFile {
 function resolveAuto(): ModelConfig {
   const config = loadConfig();
 
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (process.env.ANTHROPIC_API_KEY?.trim()) {
     return { provider: 'claude', model: 'claude-sonnet-4-5' };
   }
-  if (process.env.OPENROUTER_API_KEY) {
+  if (process.env.OPENROUTER_API_KEY?.trim()) {
     const orSmart = config.models['openrouter-smart'];
     return {
       provider: 'openrouter',
