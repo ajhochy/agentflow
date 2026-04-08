@@ -350,25 +350,41 @@ program
   .description('Print the MCP config JSON to add to Claude Code settings')
   .option('--workflows-dir <dir>', 'Directory containing .aflow files', process.cwd())
   .action((options: { workflowsDir: string }) => {
+    // Carica .env locale se presente
+    if (existsSync('.env')) {
+      const envContent = readFileSync('.env', 'utf-8');
+      for (const line of envContent.split('\n')) {
+        const match = line.match(/^([^=]+)=(.*)$/);
+        if (match && !process.env[match[1]]) {
+          process.env[match[1]] = match[2].trim();
+        }
+      }
+    }
+
     const workflowsDir = resolve(options.workflowsDir);
+    const env: Record<string, string> = {
+      AGENTFLOW_WORKFLOWS_DIR: workflowsDir,
+      OLLAMA_BASE_URL: 'http://localhost:11434',
+    };
+    if (process.env['ANTHROPIC_API_KEY']) env['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
+    if (process.env['OPENROUTER_API_KEY']) env['OPENROUTER_API_KEY'] = process.env['OPENROUTER_API_KEY'];
+
     const config = {
       mcpServers: {
         agentflow: {
           command: 'npx',
           args: ['-y', '--package=@anhonestboy/agentflow', 'agentflow-mcp'],
-          env: {
-            AGENTFLOW_WORKFLOWS_DIR: workflowsDir,
-            ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}',
-            OPENROUTER_API_KEY: '${OPENROUTER_API_KEY}',
-            OLLAMA_BASE_URL: 'http://localhost:11434',
-          },
+          env,
         },
       },
     };
 
     console.log(chalk.bold('\n📋 Add this to ~/.claude/settings.json under "mcpServers":\n'));
     console.log(JSON.stringify(config, null, 2));
-    console.log(chalk.dim('\nOr run: claude mcp add agentflow -- npx -y --package=@anhonestboy/agentflow agentflow-mcp\n'));
+    if (!process.env['ANTHROPIC_API_KEY'] && !process.env['OPENROUTER_API_KEY']) {
+      console.log(chalk.yellow('\n⚠️  No API keys found in .env — run "agentflow init" first.'));
+    }
+    console.log();
   });
 
 // models command
