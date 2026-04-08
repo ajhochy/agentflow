@@ -16,12 +16,15 @@ import { OpenRouterExecutor } from './executors/openrouter-executor.js';
 import type { WorkflowIR, AgentDef } from './types.js';
 
 function loadAndCompile(filePath: string): WorkflowIR {
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
   const source = readFileSync(filePath, 'utf-8');
   const ast = parse(source);
   return compile(ast);
 }
 
-/** Crea un ExecutorResolver che risolve il modello per ogni agente */
+/** Create an ExecutorResolver that resolves the model for each agent */
 function createExecutorResolver(
   toolRegistry: ReturnType<typeof createBuiltinRegistry>,
 ): ExecutorResolver {
@@ -53,9 +56,17 @@ program
 // init command
 program
   .command('init')
-  .description('Wizard di configurazione interattivo')
+  .description('Interactive configuration wizard')
   .action(async () => {
-    await runInit();
+    try {
+      await runInit();
+    } catch (err) {
+      if ((err as Error).name === 'ExitPromptError') {
+        console.log(chalk.yellow('\nSetup cancelled.'));
+        process.exit(0);
+      }
+      throw err;
+    }
   });
 
 // compile command
@@ -350,7 +361,7 @@ program
   .description('Print the MCP config JSON to add to Claude Code settings')
   .option('--workflows-dir <dir>', 'Directory containing .aflow files', process.cwd())
   .action((options: { workflowsDir: string }) => {
-    // Carica .env locale se presente
+    // Load local .env if present
     if (existsSync('.env')) {
       const envContent = readFileSync('.env', 'utf-8');
       for (const line of envContent.split('\n')) {

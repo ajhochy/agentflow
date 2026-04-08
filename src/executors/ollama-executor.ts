@@ -5,7 +5,7 @@ import { logger } from '../logger.js';
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'qwen3:30b'
-const OLLAMA_TIMEOUT_MS = 5 * 60 * 1000 // 5 minuti
+const OLLAMA_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
 export class OllamaExecutor implements AgentExecutor {
   private model: string;
@@ -19,10 +19,10 @@ export class OllamaExecutor implements AgentExecutor {
     input: Record<string, unknown>,
     context?: ExecutionContext,
   ): Promise<Record<string, unknown>> {
-    logger.info(`Esecuzione agente: ${agent.id} (model: ${this.model}, mode: ${agent.mode})`);
+    logger.info(`Executing agent: ${agent.id} (model: ${this.model}, mode: ${agent.mode})`);
     const system = this.buildSystemPrompt(agent, context);
 
-    // Separa i campi "codice" dagli altri
+    // Separate code fields from the rest
     const codeFields = (agent.must_produce ?? []).filter(i => i.name === 'code')
     const textFields = (agent.must_produce ?? []).filter(i => i.name !== 'code')
 
@@ -75,19 +75,19 @@ export class OllamaExecutor implements AgentExecutor {
       options: { temperature: 0, think: false, num_ctx: 4096 },
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRispondi con JSON con questi campi:\n{\n  ${fieldList}\n}\n\nNOTA: verdict deve essere ESATTAMENTE "approved" oppure "needs_work"` },
+        { role: 'user', content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRespond with JSON containing these fields:\n{\n  ${fieldList}\n}\n\nNOTE: verdict must be EXACTLY "approved" or "needs_work"` },
       ],
     })
 
-    logger.debug(`[${agent.id}] fetchJson risposta ricevuta`);
+    logger.debug(`[${agent.id}] fetchJson response received`);
 
     const data = await response.json() as { message: { content: string } }
 
     try {
       const parsed = JSON.parse(data.message.content);
-      logger.debug(`[${agent.id}] campi ricevuti: ${Object.keys(parsed).join(', ')}`);
+      logger.debug(`[${agent.id}] fields received: ${Object.keys(parsed).join(', ')}`);
 
-      // Normalizzazione fuzzy dei campi mancanti
+      // Fuzzy normalization of missing fields
       const aliases: Record<string, string[]> = {
         test_results: ['results', 'tests', 'test_output', 'testing_results', 'testResults'],
         edge_cases_tried: [
@@ -116,7 +116,7 @@ export class OllamaExecutor implements AgentExecutor {
 
       return parsed;
     } catch {
-      throw new Error(`[${agent.id}] JSON non parsabile:\n${data.message.content.slice(0, 200)}`);
+      throw new Error(`[${agent.id}] Unparseable JSON:\n${data.message.content.slice(0, 200)}`);
     }
   }
 
@@ -134,20 +134,20 @@ export class OllamaExecutor implements AgentExecutor {
       options: { temperature: 0, think: false, num_ctx: 4096 },
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRispondi con un blocco di codice TypeScript:\n\`\`\`typescript\n// il tuo codice qui\n\`\`\`` },
+        { role: 'user', content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRespond with a TypeScript code block:\n\`\`\`typescript\n// your code here\n\`\`\`` },
       ],
     })
 
-    logger.debug(`[${agent.id}] fetchCode risposta ricevuta`);
+    logger.debug(`[${agent.id}] fetchCode response received`);
 
     const data = await response.json() as { message: { content: string } }
     const content = data.message.content
 
-    // Estrai blocco ```typescript ... ``` o ``` ... ```
+    // Extract ```typescript ... ``` or ``` ... ``` block
     const match = content.match(/```(?:typescript|ts)?\n([\s\S]*?)```/)
     if (match) return match[1].trim()
 
-    // Fallback: pulizia manuale
+    // Fallback: manual cleanup
     return content
       .replace(/^```[\w]*\n?/, '')
       .replace(/\n?```$/, '')
@@ -156,33 +156,33 @@ export class OllamaExecutor implements AgentExecutor {
 
   private buildSystemPrompt(agent: AgentDef, context?: ExecutionContext): string {
     const modeMap: Record<string, string> = {
-      adversarial: 'Sei un revisore critico. Trova bug e problemi. Non approvare senza prove.',
-      focused: 'Concentrati solo sul task. Nessuna divagazione.',
-      reliable: 'Priorità: correttezza. Nessuna scorciatoia.',
-      precise: 'Output esatto. Nessuna ambiguità.',
-      strict: 'Applica tutte le regole senza eccezioni.',
-      patient: 'Analizza con cura prima di rispondere.',
+      adversarial: 'You are a critical reviewer. Find bugs and issues. Do not approve without evidence.',
+      focused: 'Focus only on the task. No digressions.',
+      reliable: 'Priority: correctness. No shortcuts.',
+      precise: 'Exact output. No ambiguity.',
+      strict: 'Apply all rules without exceptions.',
+      patient: 'Analyze carefully before responding.',
     };
 
     const lines: string[] = [];
     if (modeMap[agent.mode]) lines.push(modeMap[agent.mode]);
     if (agent.constraints?.length)
       lines.push(`Constraints:\n${agent.constraints.map((c) => `- ${c}`).join('\n')}`);
-    if (agent.rules?.length) lines.push(`Regole:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
+    if (agent.rules?.length) lines.push(`Rules:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
 
     if (context?.injectedContext) {
-      lines.push(`Contesto del progetto:\n${context.injectedContext}`);
+      lines.push(`Project context:\n${context.injectedContext}`);
     }
 
     if (context?.loop) {
       const lc = context.loop
-      lines.push(`Iterazione ${lc.iteration} di un loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`)
+      lines.push(`Iteration ${lc.iteration} of a loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`)
       if (lc.acceptance_criteria) {
-        lines.push(`Criteri di accettazione: ${lc.acceptance_criteria}`);
+        lines.push(`Acceptance criteria: ${lc.acceptance_criteria}`);
       }
     }
 
-    lines.push('Rispondi SEMPRE e SOLO con JSON valido. Nessun testo aggiuntivo.');
+    lines.push('ALWAYS respond with valid JSON only. No additional text.');
     if (agent.must_produce?.length) {
       const required = agent.must_produce
         .filter((f) => f.name !== 'code')
@@ -190,7 +190,7 @@ export class OllamaExecutor implements AgentExecutor {
         .join(', ');
       if (required)
         lines.push(
-          `Devi produrre OBBLIGATORIAMENTE questi campi: ${required}. NON includere campi "code" nel JSON — il codice viene richiesto separatamente.`,
+          `You MUST produce these fields: ${required}. Do NOT include "code" fields in the JSON — code is requested separately.`,
         );
     }
     return lines.join('\n');

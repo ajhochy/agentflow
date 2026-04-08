@@ -21,7 +21,7 @@ export class ClaudeExecutor implements AgentExecutor {
 
   constructor(options?: ClaudeExecutorOptions) {
     if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY non impostata');
+      throw new Error('ANTHROPIC_API_KEY is not set');
     }
     this.client = new Anthropic();
     this.toolRegistry = options?.toolRegistry;
@@ -133,13 +133,13 @@ export class ClaudeExecutor implements AgentExecutor {
   private buildSystemPrompt(agent: AgentDef, context?: ExecutionContext): string {
     const modeMap: Record<string, string> = {
       adversarial:
-        'Sei un revisore critico. Il tuo obiettivo è trovare bug, problemi e debolezze. Non puoi approvare senza prove concrete che tutto funzioni.',
-      focused: 'Concentrati esclusivamente sul task. Nessuna divagazione.',
-      reliable: 'Priorità assoluta: correttezza e idempotenza. Nessuna scorciatoia.',
-      precise: 'Output esatto. Nessuna ambiguità. Nessun testo superfluo.',
-      strict: 'Applica tutte le regole senza eccezioni.',
-      patient: 'Analizza con attenzione prima di rispondere.',
-      objective: 'Valuta i fatti senza bias.',
+        'You are a critical reviewer. Your goal is to find bugs, issues, and weaknesses. You must not approve without concrete evidence that everything works.',
+      focused: 'Focus exclusively on the task. No digressions.',
+      reliable: 'Top priority: correctness and idempotency. No shortcuts.',
+      precise: 'Exact output. No ambiguity. No superfluous text.',
+      strict: 'Apply all rules without exceptions.',
+      patient: 'Analyze carefully before responding.',
+      objective: 'Evaluate facts without bias.',
     };
 
     const lines: string[] = [];
@@ -148,18 +148,18 @@ export class ClaudeExecutor implements AgentExecutor {
     if (agent.constraints?.length)
       lines.push(`\nConstraints:\n${agent.constraints.map((c) => `- ${c}`).join('\n')}`);
     if (agent.rules?.length)
-      lines.push(`\nRegole:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
+      lines.push(`\nRules:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
 
     // Inform Claude about available tools
     if (agent.tools?.length) {
-      lines.push(`\nHai a disposizione i seguenti tool: ${agent.tools.join(', ')}.`);
-      lines.push('Usali quando necessario per completare il task.');
+      lines.push(`\nYou have the following tools available: ${agent.tools.join(', ')}.`);
+      lines.push('Use them as needed to complete the task.');
     }
 
     // Inject rules/context file content
     if (context?.injectedContext) {
       lines.push(
-        `\n--- Contesto del progetto ---\n${context.injectedContext}\n--- Fine contesto ---`,
+        `\n--- Project context ---\n${context.injectedContext}\n--- End context ---`,
       );
     }
 
@@ -167,18 +167,18 @@ export class ClaudeExecutor implements AgentExecutor {
     if (context?.loop) {
       const lc = context.loop;
       lines.push(
-        `\nSei nell'iterazione ${lc.iteration} di un loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`,
+        `\nYou are in iteration ${lc.iteration} of a loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`,
       );
       if (lc.acceptance_criteria) {
-        lines.push(`Criteri di accettazione del workflow: ${lc.acceptance_criteria}`);
+        lines.push(`Workflow acceptance criteria: ${lc.acceptance_criteria}`);
         lines.push(
-          'Quando questi criteri sono soddisfatti, puoi dare "approved" con la confidence appropriata.',
+          'When these criteria are met, you may give "approved" with the appropriate confidence.',
         );
       }
     }
 
     lines.push(
-      '\nQuando hai completato il lavoro, chiama produce_output con tutti i campi richiesti.',
+      '\nWhen you have completed the work, call produce_output with all required fields.',
     );
 
     return lines.join('\n');
@@ -190,13 +190,13 @@ export class ClaudeExecutor implements AgentExecutor {
 
     for (const item of agent.must_produce ?? []) {
       const jsonType = this.toJsonType(item.type);
-      properties[item.name] = { type: jsonType, description: `Campo richiesto: ${item.name}` };
+      properties[item.name] = { type: jsonType, description: `Required field: ${item.name}` };
       required.push(item.name);
     }
 
     return {
       name: 'produce_output',
-      description: `Produci l'output richiesto per l'agente ${agent.id}. Chiama questo tool DOPO aver completato il lavoro.`,
+      description: `Produce the required output for agent ${agent.id}. Call this tool AFTER completing the work.`,
       input_schema: {
         type: 'object' as const,
         properties,

@@ -13,7 +13,7 @@ export class OpenRouterExecutor implements AgentExecutor {
   constructor(model: string) {
     const key = process.env.OPENROUTER_API_KEY?.trim() ?? '';
     if (!key) {
-      throw new Error('OPENROUTER_API_KEY non impostata');
+      throw new Error('OPENROUTER_API_KEY is not set');
     }
     this.apiKey = key;
     this.model = model;
@@ -24,7 +24,7 @@ export class OpenRouterExecutor implements AgentExecutor {
     input: Record<string, unknown>,
     context?: ExecutionContext,
   ): Promise<Record<string, unknown>> {
-    logger.info(`Esecuzione agente: ${agent.id} (model: ${this.model}, mode: ${agent.mode})`);
+    logger.info(`Executing agent: ${agent.id} (model: ${this.model}, mode: ${agent.mode})`);
     const system = this.buildSystemPrompt(agent, context);
 
     const codeFields = (agent.must_produce ?? []).filter((i) => i.name === 'code');
@@ -86,14 +86,14 @@ export class OpenRouterExecutor implements AgentExecutor {
             { role: 'system', content: system },
             {
               role: 'user',
-              content: `Input:\n${JSON.stringify(input, null, 2)}\n\nDevi produrre ESATTAMENTE questi campi JSON, nessuno di più, nessuno di meno:\n{\n  ${fieldList}\n}\n\nIMPORTANTE: valori brevi e concisi (max 100 caratteri per campo). Nessun testo aggiuntivo.`,
+              content: `Input:\n${JSON.stringify(input, null, 2)}\n\nYou must produce EXACTLY these JSON fields, no more, no less:\n{\n  ${fieldList}\n}\n\nIMPORTANT: brief and concise values (max 100 characters per field). No additional text.`,
             },
           ],
         }),
       `${agent.id}/openrouter-chat`,
     );
 
-    logger.debug(`[${agent.id}] fetchJson risposta ricevuta`);
+    logger.debug(`[${agent.id}] fetchJson response received`);
 
     const data = (await response.json()) as {
       choices?: Array<{ message: { content: string } }>;
@@ -101,15 +101,15 @@ export class OpenRouterExecutor implements AgentExecutor {
     };
 
     if (!data.choices) {
-      logger.error(`[${agent.id}] risposta inattesa: ${JSON.stringify(data).slice(0, 300)}`);
+      logger.error(`[${agent.id}] unexpected response: ${JSON.stringify(data).slice(0, 300)}`);
       throw new Error(
-        `OpenRouter risposta senza choices: ${data.error?.message ?? JSON.stringify(data).slice(0, 200)}`,
+        `OpenRouter response without choices: ${data.error?.message ?? JSON.stringify(data).slice(0, 200)}`,
       );
     }
 
     const content = data.choices[0]?.message?.content ?? '{}';
 
-    // Estrai il primo blocco JSON valido dal contenuto
+    // Extract the first valid JSON block from the content
     function extractJson(raw: string): string {
       const fenced = raw.match(/```json\s*([\s\S]*?)```/);
       if (fenced) return fenced[1].trim();
@@ -131,7 +131,7 @@ export class OpenRouterExecutor implements AgentExecutor {
     try {
       const parsed = JSON.parse(extractJson(content));
 
-      // Normalizzazione fuzzy dei campi mancanti
+      // Fuzzy normalization of missing fields
       const aliases: Record<string, string[]> = {
         test_results: ['results', 'tests', 'test_output', 'testing_results', 'testResults'],
         edge_cases_tried: [
@@ -160,7 +160,7 @@ export class OpenRouterExecutor implements AgentExecutor {
 
       return parsed;
     } catch {
-      throw new Error(`[${agent.id}] JSON non parsabile:\n${content.slice(0, 200)}`);
+      throw new Error(`[${agent.id}] Unparseable JSON:\n${content.slice(0, 200)}`);
     }
   }
 
@@ -179,14 +179,14 @@ export class OpenRouterExecutor implements AgentExecutor {
             { role: 'system', content: system },
             {
               role: 'user',
-              content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRispondi con un blocco di codice TypeScript:\n\`\`\`typescript\n// il tuo codice qui\n\`\`\``,
+              content: `Input:\n${JSON.stringify(input, null, 2)}\n\nRespond with a TypeScript code block:\n\`\`\`typescript\n// your code here\n\`\`\``,
             },
           ],
         }),
       `${agent.id}/openrouter-code`,
     );
 
-    logger.debug(`[${agent.id}] fetchCode risposta ricevuta`);
+    logger.debug(`[${agent.id}] fetchCode response received`);
 
     const data = (await response.json()) as {
       choices?: Array<{ message: { content: string } }>;
@@ -194,9 +194,9 @@ export class OpenRouterExecutor implements AgentExecutor {
     };
 
     if (!data.choices) {
-      logger.error(`[${agent.id}] risposta inattesa: ${JSON.stringify(data).slice(0, 300)}`);
+      logger.error(`[${agent.id}] unexpected response: ${JSON.stringify(data).slice(0, 300)}`);
       throw new Error(
-        `OpenRouter risposta senza choices: ${data.error?.message ?? JSON.stringify(data).slice(0, 200)}`,
+        `OpenRouter response without choices: ${data.error?.message ?? JSON.stringify(data).slice(0, 200)}`,
       );
     }
 
@@ -214,30 +214,30 @@ export class OpenRouterExecutor implements AgentExecutor {
   private buildSystemPrompt(agent: AgentDef, context?: ExecutionContext): string {
     const modeMap: Record<string, string> = {
       adversarial:
-        'Sei un revisore critico. Trova bug e problemi. Non approvare senza prove concrete.',
-      focused: 'Concentrati solo sul task. Nessuna divagazione.',
-      reliable: 'Priorità: correttezza. Nessuna scorciatoia.',
-      precise: 'Output esatto. Nessuna ambiguità.',
-      strict: 'Applica tutte le regole senza eccezioni.',
-      patient: 'Analizza con cura prima di rispondere.',
+        'You are a critical reviewer. Find bugs and issues. Do not approve without concrete evidence.',
+      focused: 'Focus only on the task. No digressions.',
+      reliable: 'Priority: correctness. No shortcuts.',
+      precise: 'Exact output. No ambiguity.',
+      strict: 'Apply all rules without exceptions.',
+      patient: 'Analyze carefully before responding.',
     };
 
     const lines: string[] = [];
     if (modeMap[agent.mode]) lines.push(modeMap[agent.mode]);
     if (agent.constraints?.length)
       lines.push(`Constraints:\n${agent.constraints.map((c) => `- ${c}`).join('\n')}`);
-    if (agent.rules?.length) lines.push(`Regole:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
-    if (context?.injectedContext) lines.push(`Contesto del progetto:\n${context.injectedContext}`);
+    if (agent.rules?.length) lines.push(`Rules:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
+    if (context?.injectedContext) lines.push(`Project context:\n${context.injectedContext}`);
 
     if (context?.loop) {
       const lc = context.loop;
       lines.push(
-        `Iterazione ${lc.iteration} di un loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`,
+        `Iteration ${lc.iteration} of a loop${lc.max_iterations ? ` (max ${lc.max_iterations})` : ''}.`,
       );
-      if (lc.acceptance_criteria) lines.push(`Criteri di accettazione: ${lc.acceptance_criteria}`);
+      if (lc.acceptance_criteria) lines.push(`Acceptance criteria: ${lc.acceptance_criteria}`);
     }
 
-    lines.push('Rispondi SEMPRE e SOLO con JSON valido. Nessun testo aggiuntivo.');
+    lines.push('ALWAYS respond with valid JSON only. No additional text.');
     if (agent.must_produce?.length) {
       const required = agent.must_produce
         .filter((f) => f.name !== 'code')
@@ -245,7 +245,7 @@ export class OpenRouterExecutor implements AgentExecutor {
         .join(', ');
       if (required)
         lines.push(
-          `Devi produrre OBBLIGATORIAMENTE questi campi: ${required}. NON includere campi "code" nel JSON — il codice viene richiesto separatamente.`,
+          `You MUST produce these fields: ${required}. Do NOT include "code" fields in the JSON — code is requested separately.`,
         );
     }
     return lines.join('\n');

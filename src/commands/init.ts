@@ -159,10 +159,10 @@ function registerMcpServer(opts: {
 }): void {
   const defaultProvider = opts.openrouterKey ? 'openrouter' : opts.anthropicKey ? 'claude' : 'ollama';
 
-  // Rimuove la registrazione esistente se presente (-s user = globale)
+  // Remove existing registration if present (-s user = global)
   spawnSync('claude', ['mcp', 'remove', 'agentflow', '-s', 'user'], { stdio: 'ignore' });
 
-  // Costruisce i -e KEY=VALUE come array separato (gestisce spazi nei valori)
+  // Build -e KEY=VALUE as separate array entries (handles spaces in values)
   const envArgs: string[] = [
     '-e', `AGENTFLOW_WORKFLOWS_DIR=${opts.workflowsDir}`,
     '-e', `AGENTFLOW_DEFAULT_PROVIDER=${defaultProvider}`,
@@ -171,7 +171,7 @@ function registerMcpServer(opts: {
   if (opts.openrouterKey) envArgs.push('-e', `OPENROUTER_API_KEY=${opts.openrouterKey}`);
   if (opts.anthropicKey) envArgs.push('-e', `ANTHROPIC_API_KEY=${opts.anthropicKey}`);
 
-  // nome prima delle opzioni, -s user = scope globale
+  // name before options, -s user = global scope
   const result = spawnSync(
     'claude',
     ['mcp', 'add', 'agentflow', '-s', 'user', ...envArgs, '--', 'agentflow-mcp'],
@@ -198,7 +198,7 @@ function writeEnvKey(key: string, value: string): void {
 // ── Main ─────────────────────────────────────────────────────────────
 
 export async function runInit(): Promise<void> {
-  // Carica le variabili dal .env esistente prima di tutto
+  // Load variables from existing .env first
   if (existsSync('.env')) {
     const envContent = readFileSync('.env', 'utf-8');
     for (const line of envContent.split('\n')) {
@@ -275,7 +275,7 @@ export async function runInit(): Promise<void> {
   const ramGb = parseInt(ramStr);
   const numCtx = numCtxFromRam(ramGb);
 
-  // ── 5. Modelli Ollama ────────────────────────────────────────────
+  // ── 5. Ollama models ─────────────────────────────────────────────
   const { fast: ollamaFastDefault, smart: ollamaSmartDefault } = recommendModels(
     ollamaModels,
     ramGb,

@@ -86,8 +86,8 @@ function makeError(id: number | string | null, code: number, message: string): J
 async function main() {
   const workflowsDir = process.env.AGENTFLOW_WORKFLOWS_DIR || './examples';
 
-  // Carica .env dalla cartella dei workflow come fallback
-  // (Claude Code potrebbe non passare tutte le env vars al processo figlio)
+  // Load .env from the workflows directory as fallback
+  // (Claude Code may not pass all env vars to the child process)
   const dotenvPath = join(workflowsDir, '.env');
   if (existsSync(dotenvPath)) {
     const lines = readFileSync(dotenvPath, 'utf-8').split('\n');
@@ -100,7 +100,7 @@ async function main() {
     console.error(`[agentflow] Loaded .env from: ${dotenvPath}`);
   }
 
-  // Scrivi log di diagnostica su file (leggibile anche quando stderr non è visibile)
+  // Write diagnostic log to file (readable even when stderr is not visible)
   const debugLog = [
     `[${new Date().toISOString()}] agentflow-mcp startup`,
     `AGENTFLOW_WORKFLOWS_DIR: ${workflowsDir}`,
@@ -176,7 +176,7 @@ async function main() {
 
             tools.push({
               name: id,
-              description: w.description ?? `Esegui workflow: ${id}`,
+              description: w.description ?? `Execute workflow: ${id}`,
               inputSchema: {
                 type: 'object',
                 properties,

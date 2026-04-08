@@ -6,18 +6,18 @@ export function validate(ir: WorkflowIR): ValidationResult {
 
   const { agents, phases, loop } = ir.workflow;
 
-  // S1: phase.agent deve esistere in agents
+  // S1: phase.agent must exist in agents
   for (const phase of phases) {
     if (phase.agent && !agents[phase.agent]) {
       errors.push({
         rule: 'S1',
-        message: `La fase "${phase.id}" usa l'agente "${phase.agent}" non definito.`,
+        message: `Phase "${phase.id}" references undefined agent "${phase.agent}".`,
         phase: phase.id,
       });
     }
   }
 
-  // S2: ogni output dichiarato in phase.output deve essere in must_produce dell'agente
+  // S2: every output declared in phase.output must be in agent's must_produce
   for (const phase of phases) {
     if (phase.output && phase.agent && agents[phase.agent]) {
       const agent = agents[phase.agent];
@@ -26,7 +26,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
         if (!produces.has(out)) {
           errors.push({
             rule: 'S2',
-            message: `L'output "${out}" della fase "${phase.id}" non è in must_produce dell'agente "${phase.agent}".`,
+            message: `Output "${out}" of phase "${phase.id}" is not in must_produce of agent "${phase.agent}".`,
             phase: phase.id,
             agent: phase.agent,
           });
@@ -35,55 +35,55 @@ export function validate(ir: WorkflowIR): ValidationResult {
     }
   }
 
-  // S3: ogni fase citata in loop.phases deve esistere in phases
+  // S3: every phase referenced in loop.phases must exist in phases
   if (loop) {
     const phaseIds = new Set(phases.map((p) => p.id));
     for (const loopPhaseId of loop.phases) {
       if (!phaseIds.has(loopPhaseId)) {
         errors.push({
           rule: 'S3',
-          message: `Il loop "${loop.id}" riferisce la fase "${loopPhaseId}" che non esiste.`,
+          message: `Loop "${loop.id}" references phase "${loopPhaseId}" which does not exist.`,
         });
       }
     }
   }
 
-  // S4: agente senza must_produce — warning
+  // S4: agent without must_produce — warning
   for (const [agentId, agent] of Object.entries(agents)) {
     if (!agent.must_produce || agent.must_produce.length === 0) {
       warnings.push({
         rule: 'S4',
-        message: `L'agente "${agentId}" non ha must_produce — output non validati a runtime.`,
+        message: `Agent "${agentId}" has no must_produce — outputs will not be validated at runtime.`,
         agent: agentId,
       });
     }
   }
 
-  // S5: loop senza max_iterations (o max_iterations <= 0)
+  // S5: loop without max_iterations (or max_iterations <= 0)
   if (loop) {
     if (!loop.max_iterations || loop.max_iterations <= 0) {
       errors.push({
         rule: 'S5',
-        message: `Il loop "${loop.id}" non ha max_iterations o ha un valore <= 0.`,
+        message: `Loop "${loop.id}" has no max_iterations or has a value <= 0.`,
       });
     }
   }
 
-  // S6: must_produce['confidence'] deve essere tipo float
+  // S6: must_produce['confidence'] must be of type float
   for (const [agentId, agent] of Object.entries(agents)) {
     if (agent.must_produce) {
       const confidenceItem = agent.must_produce.find((m) => m.name === 'confidence');
       if (confidenceItem && confidenceItem.type && confidenceItem.type !== 'float') {
         errors.push({
           rule: 'S6',
-          message: `L'agente "${agentId}" ha must_produce "confidence" con tipo "${confidenceItem.type}" ma deve essere "float".`,
+          message: `Agent "${agentId}" has must_produce "confidence" with type "${confidenceItem.type}" but it must be "float".`,
           agent: agentId,
         });
       }
     }
   }
 
-  // S7: agente adversarial con constraint che contiene 'agree' o 'approve'
+  // S7: adversarial agent with constraint containing 'agree' or 'approve'
   for (const [agentId, agent] of Object.entries(agents)) {
     if (agent.mode === 'adversarial' && agent.constraints) {
       for (const constraint of agent.constraints) {
@@ -91,7 +91,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
         if (lower.includes('agree') || lower.includes('approve')) {
           warnings.push({
             rule: 'S7',
-            message: `L'agente adversarial "${agentId}" ha un constraint con 'agree' o 'approve' — potrebbe contraddire il suo ruolo.`,
+            message: `Adversarial agent "${agentId}" has a constraint with 'agree' or 'approve' — may conflict with its role.`,
             agent: agentId,
           });
         }
@@ -99,7 +99,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
     }
   }
 
-  // S8: come S7 ma per fase — controlla constraint dell'agente usato dalla fase
+  // S8: like S7 but for phases — check constraints of the agent used by the phase
   for (const phase of phases) {
     if (phase.agent && agents[phase.agent]) {
       const agent = agents[phase.agent];
@@ -109,7 +109,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
           if (lower.includes('agree') || lower.includes('approve')) {
             warnings.push({
               rule: 'S8',
-              message: `La fase "${phase.id}" usa l'agente adversarial "${phase.agent}" con constraint sospetto.`,
+              message: `Phase "${phase.id}" uses adversarial agent "${phase.agent}" with a suspicious constraint.`,
               phase: phase.id,
             });
           }
@@ -118,23 +118,23 @@ export function validate(ir: WorkflowIR): ValidationResult {
     }
   }
 
-  // S9: fase human_action_required senza timeout
+  // S9: human_action_required phase without timeout
   for (const phase of phases) {
     if (phase.type === 'human_action_required' && !phase.timeout) {
       errors.push({
         rule: 'S9',
-        message: `La fase "${phase.id}" è di tipo "human_action_required" ma non ha timeout.`,
+        message: `Phase "${phase.id}" is of type "human_action_required" but has no timeout.`,
         phase: phase.id,
       });
     }
   }
 
-  // S10: fase con sia poll che retry
+  // S10: phase with both poll and retry
   for (const phase of phases) {
     if (phase.poll && phase.retry) {
       errors.push({
         rule: 'S10',
-        message: `La fase "${phase.id}" ha sia poll che retry — non è consentito.`,
+        message: `Phase "${phase.id}" has both poll and retry — this is not allowed.`,
         phase: phase.id,
       });
     }
