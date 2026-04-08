@@ -4,10 +4,13 @@ import { createInterface } from 'node:readline';
 import { parse } from './parser.js';
 import { compile } from './compiler.js';
 import { validate } from './validate.js';
-import { WorkflowRunner, MockAgentExecutor } from './runtime.js';
+import { WorkflowRunner } from './runtime.js';
 import { ClaudeExecutor } from './executors/claude-executor.js';
 import { OllamaExecutor } from './executors/ollama-executor.js';
+import { OpenRouterExecutor } from './executors/openrouter-executor.js';
+import { resolveModel } from './model-resolver.js';
 import { createBuiltinRegistry } from './tools/index.js';
+import type { AgentDef } from './types.js';
 import type { WorkflowIR } from './types.js';
 
 // ─── Load workflows ─────────────────────────────────────────────────
@@ -177,12 +180,15 @@ async function main() {
           const outputDir = resolve(`./output/${ir.workflow.id}`);
           const toolRegistry = createBuiltinRegistry(outputDir);
 
-          const useClaude = !!process.env.ANTHROPIC_API_KEY;
-          const executor = useClaude
-            ? new ClaudeExecutor({ toolRegistry })
-            : new OllamaExecutor();
-
-          console.error(`[agentflow] Executor: ${useClaude ? 'Claude' : `Ollama (${process.env.OLLAMA_MODEL ?? 'gemma4:e4b'})`}`);
+          const executor = (agent: AgentDef) => {
+            const cfg = resolveModel(agent.model);
+            console.error(`[agentflow] [${agent.id}] ${cfg.provider}/${cfg.model}`);
+            switch (cfg.provider) {
+              case 'claude': return new ClaudeExecutor({ toolRegistry });
+              case 'openrouter': return new OpenRouterExecutor(cfg.model);
+              default: return new OllamaExecutor(cfg);
+            }
+          };
 
           const runner = new WorkflowRunner(ir, executor, { outputDir });
           const instance = await runner.run(params.arguments ?? {});
