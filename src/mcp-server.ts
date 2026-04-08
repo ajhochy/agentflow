@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { parse } from './parser.js';
@@ -85,6 +85,20 @@ function makeError(id: number | string | null, code: number, message: string): J
 
 async function main() {
   const workflowsDir = process.env.AGENTFLOW_WORKFLOWS_DIR || './examples';
+
+  // Carica .env dalla cartella dei workflow come fallback
+  // (Claude Code potrebbe non passare tutte le env vars al processo figlio)
+  const dotenvPath = join(workflowsDir, '.env');
+  if (existsSync(dotenvPath)) {
+    const lines = readFileSync(dotenvPath, 'utf-8').split('\n');
+    for (const line of lines) {
+      const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m && !process.env[m[1]]) {
+        process.env[m[1]] = m[2].trim();
+      }
+    }
+    console.error(`[agentflow] Loaded .env from: ${dotenvPath}`);
+  }
 
   // Diagnostica env vars al startup
   const orKey = process.env.OPENROUTER_API_KEY?.trim();

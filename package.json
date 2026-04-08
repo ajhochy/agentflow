@@ -1,6 +1,6 @@
 {
   "name": "@anhonestboy/agentflow",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "AgentFlow DSL — declarative language for multi-agent orchestration",
   "type": "module",
   "license": "MIT",
