@@ -141,7 +141,7 @@ describe('WorkflowRunner — incremental state saving', () => {
     expect(saved.completed_at).toBeDefined();
   });
 
-  test('salva stato failed se must_produce manca', async () => {
+  test('riempie default se must_produce manca invece di fallire', async () => {
     const ir = compileSource(SIMPLE_WORKFLOW);
 
     // Executor che non produce nulla
@@ -151,16 +151,23 @@ describe('WorkflowRunner — incremental state saving', () => {
 
     const runner = new WorkflowRunner(ir, badExecutor);
 
-    await expect(runner.run({ task: 'test' })).rejects.toThrow('missing_output');
+    // Non deve più lanciare errore — riempie i default
+    const instance = await runner.run({ task: 'test' });
+    
+    // Il workflow completa con campi default
+    expect(instance.state).toBe('completed');
+    expect(instance.phase_states['write']).toBe('completed');
+    // I campi must_produce mancanti sono riempiti con default (stringa vuota)
+    expect(instance.phase_outputs['write']).toEqual({ code: '', summary: '' });
 
-    // Il .state.json deve esistere con fase failed
+    // Il .state.json deve esistere
     const files = readdirSync(tempDir) as string[];
     const stateFile = files.find((f: string) => f.endsWith('.state.json'));
     expect(stateFile).toBeDefined();
 
     const saved = JSON.parse(readFileSync(join(tempDir, stateFile!), 'utf-8'));
-    expect(saved.phase_states['write']).toBe('failed');
-    expect(saved.state).toBe('failed');
+    expect(saved.state).toBe('completed');
+    expect(saved.phase_states['write']).toBe('completed');
   });
 });
 
