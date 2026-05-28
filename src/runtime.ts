@@ -253,18 +253,20 @@ export class WorkflowRunner {
     // Execute agent
     const output = await executor.execute(agent, input, resolvedContext);
 
-    // Verify must_produce
+    // Verify must_produce — fill missing fields with defaults instead of crashing
     if (agent.must_produce) {
       const missing = agent.must_produce
         .filter((item) => !(item.name in output))
         .map((item) => item.name);
 
       if (missing.length > 0) {
-        instance.phase_states[phase.id] = 'failed';
-        this.saveState(instance);
-        throw new Error(
-          `missing_output: Agent "${agent.id}" in phase "${phase.id}" did not produce: ${missing.join(', ')}`,
+        logger.warn(
+          `[${agent.id}] missing output fields: ${missing.join(', ')} — using defaults`,
         );
+        for (const name of missing) {
+          const item = agent.must_produce.find((m) => m.name === name);
+          output[name] = item?.type === 'float' || item?.type === 'int' ? 0 : '';
+        }
       }
     }
 

@@ -80,7 +80,7 @@ export class OpenRouterExecutor implements AgentExecutor {
       () =>
         this.fetchWithTimeout({
           model: this.model,
-          max_tokens: 1024,
+          max_tokens: 2048,
           response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: system },
@@ -128,8 +128,36 @@ export class OpenRouterExecutor implements AgentExecutor {
       return raw.slice(start);
     }
 
+    // Repair truncated JSON (common when model output hits token limits)
+    function repairTruncatedJson(raw: string): string {
+      try { JSON.parse(raw); return raw; } catch { /* needs repair */ }
+
+      let result = raw;
+
+      // Close unclosed string values (last " is start of value, no closing " or } after it)
+      const lastQuote = result.lastIndexOf('"');
+      const lastColon = result.lastIndexOf(':');
+      if (lastQuote > lastColon) {
+        const afterQuote = result.slice(lastQuote + 1);
+        if (!afterQuote.includes('"') && !afterQuote.includes('}')) {
+          result = result + '"';
+        }
+      }
+
+      // Close unclosed braces
+      let depth = 0;
+      for (const ch of result) {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+      }
+      result += '}'.repeat(Math.max(0, depth));
+
+      return result;
+    }
+
+    const rawJson = extractJson(content);
     try {
-      const parsed = JSON.parse(extractJson(content));
+      const parsed = JSON.parse(rawJson);
 
       // Fuzzy normalization of missing fields
       const aliases: Record<string, string[]> = {
@@ -160,7 +188,15 @@ export class OpenRouterExecutor implements AgentExecutor {
 
       return parsed;
     } catch {
-      throw new Error(`[${agent.id}] Unparseable JSON:\n${content.slice(0, 200)}`);
+      // Try repaired version before giving up
+      try {
+        const repaired = repairTruncatedJson(rawJson);
+        const parsed = JSON.parse(repaired);
+        logger.warn(`[${agent.id}] JSON was truncated — repaired automatically`);
+        return parsed;
+      } catch {
+        throw new Error(`[${agent.id}] Unparseable JSON:\n${content.slice(0, 200)}`);
+      }
     }
   }
 
