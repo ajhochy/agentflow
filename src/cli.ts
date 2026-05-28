@@ -216,8 +216,8 @@ program
   )
   .action(async (file: string, options: { input?: string; mock?: boolean; outputDir?: string }) => {
     if (!existsSync('agentflow.config.json')) {
-      console.log(chalk.yellow('⚠️  agentflow.config.json not found. Run first: agentflow init\n'));
-      process.exit(1);
+      console.log(chalk.yellow('⚠️  agentflow.config.json not found — using built-in defaults.\n'));
+      console.log(chalk.dim('   Run "agentflow init" to customize models and providers.\n'));
     }
 
     try {
