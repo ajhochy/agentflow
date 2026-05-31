@@ -1,0 +1,44 @@
+workflow rick_summary
+  description: "Rick-style summary: takes a topic, returns a sarcastic but insightful take"
+  version: "1.0.0"
+
+  trigger:
+    input:
+      - topic: string
+
+  agents:
+    agent rick_analyst
+      model: "openrouter-smart"
+      mode: focused
+      must_produce:
+        - hot_take
+        - three_insights
+
+    agent rick_writer
+      model: "hermes"
+      mode: focused
+      must_produce:
+        - summary
+        - word_count: int
+      rule: "Write a sarcastic, insightful summary of at least 50 words. Channel Rick Sanchez energy."
+
+  phases:
+    phase analyze
+      agent: rick_analyst
+      input: [trigger.topic]
+      output: [hot_take, three_insights]
+
+    phase write
+      agent: rick_writer
+      input: [analyze.hot_take, analyze.three_insights]
+      output: [summary, word_count]
+
+  loop polishing
+    phases: [write]
+    repeat_while: write.word_count < 50
+    max_iterations: 3
+    on_each_iteration:
+      send_to: rick_writer
+      payload: "Too short. Expand to at least 50 words. Be more sarcastic."
+
+  done when: write.word_count >= 50

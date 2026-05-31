@@ -13,6 +13,7 @@ import { resolveModel } from './model-resolver.js';
 import { createBuiltinRegistry } from './tools/index.js';
 import { runInit } from './commands/init.js';
 import { OpenRouterExecutor } from './executors/openrouter-executor.js';
+import { HermesExecutor } from './executors/hermes-executor.js';
 import type { WorkflowIR, AgentDef } from './types.js';
 
 function loadAndCompile(filePath: string): WorkflowIR {
@@ -39,6 +40,8 @@ function createExecutorResolver(
         return new ClaudeExecutor({ toolRegistry });
       case 'openrouter':
         return new OpenRouterExecutor(modelConfig.model);
+      case 'hermes':
+        return new HermesExecutor();
       case 'ollama':
       default:
         return new OllamaExecutor(modelConfig);
