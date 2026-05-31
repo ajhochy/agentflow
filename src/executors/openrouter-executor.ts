@@ -130,7 +130,12 @@ export class OpenRouterExecutor implements AgentExecutor {
 
     // Repair truncated JSON (common when model output hits token limits)
     function repairTruncatedJson(raw: string): string {
-      try { JSON.parse(raw); return raw; } catch { /* needs repair */ }
+      try {
+        JSON.parse(raw);
+        return raw;
+      } catch {
+        /* needs repair */
+      }
 
       let result = raw;
 
