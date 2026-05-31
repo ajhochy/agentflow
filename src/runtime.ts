@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { validateJsonSchema } from './schema-validator.js';
 import type {
   WorkflowIR,
   AgentDef,
@@ -268,11 +269,67 @@ export class WorkflowRunner {
       }
     }
 
+    // JSON Schema validation
+    if (agent.output_schema) {
+      const validationResult = await this.validateAndRetry(
+        agent, input, output, resolvedContext, phase.id
+      );
+      if (validationResult === 'abort') {
+        instance.phase_states[phase.id] = 'failed';
+        throw new Error(`Phase "${phase.id}" aborted: output failed schema validation after retries`);
+      }
+      // Merge validated output back
+      Object.assign(output, validationResult === 'default' ? output : validationResult);
+    }
+
     // Save output
     instance.phase_outputs[phase.id] = output;
     instance.phase_states[phase.id] = 'completed';
     this.saveState(instance);
     this.writePhaseOutput(phase.id, output);
+  }
+
+  private async validateAndRetry(
+    agent: AgentDef,
+    input: Record<string, unknown>,
+    initialOutput: Record<string, unknown>,
+    context: ExecutionContext | undefined,
+    _phaseId: string,
+  ): Promise<Record<string, unknown> | 'abort' | 'default'> {
+    const schema = agent.output_schema!;
+    const retries = agent.validation?.retry ?? 0;
+    const onFail = agent.validation?.on_fail ?? 'default';
+
+    let current = initialOutput;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const errors = validateJsonSchema(current, schema);
+      if (errors.length === 0) {
+        if (attempt > 0) {
+          logger.info(`[${agent.id}] output passed schema validation after ${attempt} retry(s)`);
+        }
+        return current;
+      }
+
+      const errorSummary = errors.slice(0, 3).join('; ');
+      logger.warn(`[${agent.id}] schema validation failed (attempt ${attempt + 1}/${retries + 1}): ${errorSummary}`);
+
+      if (attempt < retries) {
+        const retryInput = {
+          ...input,
+          _validation_errors: errorSummary,
+          _previous_output: JSON.stringify(current),
+          _retry_instruction: `Your previous output failed validation. Fix these errors and produce valid JSON output:\n${errorSummary}`,
+        };
+        const executor = this.resolveExecutor(agent);
+        current = await executor.execute(agent, retryInput, context);
+      }
+    }
+
+    if (onFail === 'abort') {
+      return 'abort';
+    }
+    return 'default';
   }
 
   private async executeLoop(
