@@ -64,9 +64,7 @@ export class HermesExecutor implements AgentExecutor {
   ): Promise<Record<string, unknown>> {
     logger.debug(`[${agent.id}] hermes fetchJson: ${fields.map((f) => f.name).join(', ')}`);
 
-    const fieldList = fields
-      .map((i) => `"${i.name}": "<${i.type ?? 'string'}>"`)
-      .join(',\n  ');
+    const fieldList = fields.map((i) => `"${i.name}": "<${i.type ?? 'string'}>"`).join(',\n  ');
 
     const userPrompt = `Input:\n${JSON.stringify(input, null, 2)}\n\nYou must produce EXACTLY these JSON fields, no more, no less:\n{\n  ${fieldList}\n}\n\nIMPORTANT: brief and concise values. No additional text outside the JSON.`;
 
@@ -90,7 +88,9 @@ export class HermesExecutor implements AgentExecutor {
     };
 
     if (!data.choices) {
-      logger.error(`[${agent.id}] hermes unexpected response: ${JSON.stringify(data).slice(0, 300)}`);
+      logger.error(
+        `[${agent.id}] hermes unexpected response: ${JSON.stringify(data).slice(0, 300)}`,
+      );
       throw new Error(
         `Hermes response without choices: ${data.error?.message ?? JSON.stringify(data).slice(0, 200)}`,
       );
