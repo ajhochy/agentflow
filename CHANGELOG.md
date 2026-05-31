@@ -2,6 +2,21 @@
 
 All notable changes to AgentFlow DSL will be documented in this file.
 
+## [1.0.17] — 2026-05-31
+
+### Added
+- **Schema validation**: `output_schema` with JSON Schema support (type, required, properties, minLength/maxLength, minimum/maximum, nested objects)
+- **Validation retry**: `validation.retry` with automatic feedback loop when agent output fails schema check
+- **Validation gate**: `validation.on_fail` — `abort` (stop workflow) or `default` (backward-compatible, fills with defaults)
+- **HermesExecutor**: call Hermes API as a "model" in AgentFlow workflows, enabling tools and creative writing
+- **rick_summary.aflow**: example workflow with analyzer → rick_writer → reviewer loop
+- **instagram_reel_narration.aflow**: poetry narration pipeline with confidence gate (≥ 0.85)
+- Built-in JSON Schema validator (zero-dependency, inline to avoid ESM/CJS conflicts)
+
+### Changed
+- Workflow examples now use explicit `trigger.input` instead of `trigger.topic` for MCP compatibility
+- OpenRouter executor: increased `max_tokens` default to 4096
+
 ## [1.0.16] — 2026-05-28
 
 ### Fixed
