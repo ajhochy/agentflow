@@ -260,9 +260,7 @@ export class WorkflowRunner {
         .map((item) => item.name);
 
       if (missing.length > 0) {
-        logger.warn(
-          `[${agent.id}] missing output fields: ${missing.join(', ')} — using defaults`,
-        );
+        logger.warn(`[${agent.id}] missing output fields: ${missing.join(', ')} — using defaults`);
         for (const name of missing) {
           const item = agent.must_produce.find((m) => m.name === name);
           output[name] = item?.type === 'float' || item?.type === 'int' ? 0 : '';

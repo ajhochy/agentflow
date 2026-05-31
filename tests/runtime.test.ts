@@ -153,7 +153,7 @@ describe('WorkflowRunner — incremental state saving', () => {
 
     // Non deve più lanciare errore — riempie i default
     const instance = await runner.run({ task: 'test' });
-    
+
     // Il workflow completa con campi default
     expect(instance.state).toBe('completed');
     expect(instance.phase_states['write']).toBe('completed');
