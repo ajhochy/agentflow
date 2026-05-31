@@ -1,6 +1,6 @@
 # AgentFlow DSL
 
-**A declarative language for multi-agent AI workflows — compile to MCP tools, no code required.**
+**A declarative language for multi-agent AI workflows — compile to MCP tools, no glue code required.**
 
 [![npm version](https://img.shields.io/npm/v/@anhonestboy/agentflow)](https://www.npmjs.com/package/@anhonestboy/agentflow)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
