@@ -22,12 +22,21 @@ export type MustProduceItem = {
   type?: string; // bool, string, int, float, datetime, date, object, array
 };
 
+export type JSONSchema = Record<string, unknown>;
+
+export type ValidationConfig = {
+  retry?: number;      // max retries on validation failure (default 0)
+  on_fail?: 'abort' | 'default';  // abort = stop workflow, default = fill defaults (backward compat)
+};
+
 export type AgentDef = {
   id: string;
   model?: string;
   mode: string; // focused, adversarial, reliable, etc.
   tools?: string[];
   must_produce?: MustProduceItem[];
+  output_schema?: JSONSchema;       // JSON Schema for output validation
+  validation?: ValidationConfig;    // retry/abort on validation failure
   inject_context?: string;
   fail_fast?: boolean;
   constraints?: string[];

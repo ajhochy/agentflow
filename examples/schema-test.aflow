@@ -1,0 +1,38 @@
+workflow schema_test
+  description: "Test output_schema validation — writer must produce a valid word_count"
+  version: "1.0.0"
+
+  trigger:
+    input:
+      - topic: string
+
+  agents:
+    agent writer
+      model: "openrouter-smart"
+      mode: focused
+      must_produce:
+        - summary
+        - word_count: int
+      output_schema:
+        type: object
+        properties:
+          summary:
+            type: string
+            minLength: 20
+          word_count:
+            type: integer
+            minimum: 10
+        required:
+          - summary
+          - word_count
+      validation:
+        retry: 2
+        on_fail: abort
+
+  phases:
+    phase write
+      agent: writer
+      input: [trigger.topic]
+      output: [summary, word_count]
+
+  done when: write.word_count >= 10

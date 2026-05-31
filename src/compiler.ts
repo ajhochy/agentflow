@@ -176,6 +176,8 @@ function compileAgent(ast: ASTAgent): AgentDef {
     mode: getString(props, 'mode') ?? 'focused',
     tools,
     must_produce: mustProduceList.length > 0 ? mustProduceList : undefined,
+    output_schema: compileOutputSchema(props),
+    validation: compileValidation(props),
     inject_context: getString(props, 'inject_context'),
     fail_fast: getBool(props, 'fail_fast'),
     constraints: constraints.length > 0 ? constraints : undefined,
@@ -225,6 +227,43 @@ function compileMustProduce(props: ASTProperty[]): MustProduceItem[] {
   }
 
   return [];
+}
+
+function compileOutputSchema(props: ASTProperty[]): Record<string, unknown> | undefined {
+  const prop = findProp(props, 'output_schema');
+  if (!prop) return undefined;
+
+  try {
+    // Serialize AST to JSON: blocks become objects, lists become arrays, literals become values
+    return astValueToPlain(prop.value) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+function compileValidation(props: ASTProperty[]): { retry?: number; on_fail?: 'abort' | 'default' } | undefined {
+  const prop = findProp(props, 'validation');
+  if (!prop || prop.value.kind !== 'block') return undefined;
+
+  const vProps = prop.value.properties;
+  const retry = getNumber(vProps, 'retry');
+  const onFail = getString(vProps, 'on_fail') as 'abort' | 'default' | undefined;
+
+  if (retry === undefined && !onFail) return undefined;
+  return { retry, on_fail: onFail || 'default' };
+}
+
+function astValueToPlain(value: ASTValue): unknown {
+  if (value.kind === 'literal') return value.value;
+  if (value.kind === 'list') return value.items.map(astValueToPlain);
+  if (value.kind === 'block') {
+    const obj: Record<string, unknown> = {};
+    for (const p of value.properties) {
+      obj[p.key] = astValueToPlain(p.value);
+    }
+    return obj;
+  }
+  return null;
 }
 
 // ─── Phase compilation ──────────────────────────────────────────────

@@ -1,0 +1,67 @@
+workflow instagram_reel_narration
+  description: "Generate poetic English narration for Instagram Reel from photo description — @dudihasson1 style"
+  version: "1.0.0"
+
+  trigger:
+    input:
+      - photo_description: string
+
+  agents:
+    agent analyzer
+      model: "openrouter-smart"
+      mode: patient
+      must_produce:
+        - atmosphere
+        - visual_details
+        - emotional_core
+      rule: "Describe the mood, not the objects. What does this scene feel like? What's the emotional weight?"
+
+    agent writer
+      model: "hermes"
+      mode: focused
+      must_produce:
+        - hook
+        - narration
+        - word_count: int
+      rule: "Write in the style of @dudihasson1: short poetic sentences, slightly melancholic. Hook = one visual observation in ALL CAPS. Body = 5-7 short sentences. Closing = a line that lingers. NO descriptions of what is visible — evoke atmosphere. Use simple, concrete words."
+      rule: "Each sentence must be a standalone phrase. Use periods, not commas. Slow, measured rhythm."
+
+    agent reviewer
+      model: "openrouter-smart"
+      mode: adversarial
+      must_produce:
+        - verdict
+        - suggestions
+        - confidence: float
+      constraint: "Reject if the narration is descriptive or literal. It must be poetic and atmospheric."
+      constraint: "Reject if sentences are too long or complex. Each line must be 5-12 words."
+      constraint: "Reject if the hook is not in ALL CAPS or doesn't capture a single visual observation."
+
+  phases:
+    phase analyze
+      agent: analyzer
+      input: [trigger.photo_description]
+      output: [atmosphere, visual_details, emotional_core]
+
+    phase write
+      agent: writer
+      input: [analyze.atmosphere, analyze.visual_details, analyze.emotional_core]
+      output: [hook, narration, word_count]
+
+    phase review
+      agent: reviewer
+      input: [write.hook, write.narration]
+      output: [verdict, suggestions, confidence]
+
+  loop polish
+    phases: [write, review]
+    repeat_while: review.verdict == "needs_work"
+    max_iterations: 3
+    on_each_iteration:
+      send_to: writer
+      payload: review.suggestions
+    on_max_exceeded:
+      escalate_to: human_reviewer
+      message: "Narration failed review after 3 iterations"
+
+  done when: review.verdict == "approved" and review.confidence >= 0.8
