@@ -241,7 +241,9 @@ function compileOutputSchema(props: ASTProperty[]): Record<string, unknown> | un
   }
 }
 
-function compileValidation(props: ASTProperty[]): { retry?: number; on_fail?: 'abort' | 'default' } | undefined {
+function compileValidation(
+  props: ASTProperty[],
+): { retry?: number; on_fail?: 'abort' | 'default' } | undefined {
   const prop = findProp(props, 'validation');
   if (!prop || prop.value.kind !== 'block') return undefined;
 
