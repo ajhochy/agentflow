@@ -23,7 +23,7 @@ const FALLBACK_CONFIG: ConfigFile = {
     'local-smart': { provider: 'ollama', model: 'qwen2.5:14b', options: { num_ctx: 4096 } },
     'openrouter-smart': { provider: 'openrouter', model: 'google/gemini-2.5-pro' },
     'openrouter-free': { provider: 'openrouter', model: 'meta-llama/llama-3.3-8b-instruct:free' },
-    'hermes': { provider: 'hermes', model: 'hermes-agent' },
+    hermes: { provider: 'hermes', model: 'hermes-agent' },
   },
 };
 
