@@ -2,6 +2,10 @@ workflow blog_post
   description: "Generate and refine a blog post with researcher, writer, and editor"
   version: "1.0.0"
 
+  trigger:
+    input:
+      - topic: string
+
   agents:
     agent researcher
       mode: patient

@@ -8,6 +8,7 @@ import { WorkflowRunner } from './runtime.js';
 import { ClaudeExecutor } from './executors/claude-executor.js';
 import { OllamaExecutor } from './executors/ollama-executor.js';
 import { OpenRouterExecutor } from './executors/openrouter-executor.js';
+import { HermesExecutor } from './executors/hermes-executor.js';
 import { resolveModel } from './model-resolver.js';
 import { createBuiltinRegistry } from './tools/index.js';
 import type { AgentDef } from './types.js';
@@ -214,6 +215,8 @@ async function main() {
                 return new ClaudeExecutor({ toolRegistry });
               case 'openrouter':
                 return new OpenRouterExecutor(cfg.model);
+              case 'hermes':
+                return new HermesExecutor();
               default:
                 return new OllamaExecutor(cfg);
             }

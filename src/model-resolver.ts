@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 export type ModelConfig = {
-  provider: 'claude' | 'ollama' | 'openrouter';
+  provider: 'claude' | 'ollama' | 'openrouter' | 'hermes';
   model: string;
   options?: Record<string, unknown>;
 };
@@ -23,6 +23,7 @@ const FALLBACK_CONFIG: ConfigFile = {
     'local-smart': { provider: 'ollama', model: 'qwen2.5:14b', options: { num_ctx: 4096 } },
     'openrouter-smart': { provider: 'openrouter', model: 'google/gemini-2.5-pro' },
     'openrouter-free': { provider: 'openrouter', model: 'meta-llama/llama-3.3-8b-instruct:free' },
+    'hermes': { provider: 'hermes', model: 'hermes-agent' },
   },
 };
 
@@ -67,6 +68,9 @@ function resolveAuto(): ModelConfig {
           model: process.env.OLLAMA_MODEL ?? 'qwen2.5:14b',
           options: { num_ctx: 4096 },
         };
+  }
+  if (forced === 'hermes') {
+    return { provider: 'hermes', model: 'hermes-agent' };
   }
   if (forced === 'claude' && process.env.ANTHROPIC_API_KEY?.startsWith('sk-ant-')) {
     return { provider: 'claude', model: 'claude-sonnet-4-5' };

@@ -2,6 +2,10 @@ workflow code_quality
   description: "Iterative code quality workflow with writer, tester, and critic agents"
   version: "1.0.0"
 
+  trigger:
+    input:
+      - task: string
+
   context:
     rules_file: "coding-standards.md"
 
