@@ -25,8 +25,8 @@ export type MustProduceItem = {
 export type JSONSchema = Record<string, unknown>;
 
 export type ValidationConfig = {
-  retry?: number;      // max retries on validation failure (default 0)
-  on_fail?: 'abort' | 'default';  // abort = stop workflow, default = fill defaults (backward compat)
+  retry?: number; // max retries on validation failure (default 0)
+  on_fail?: 'abort' | 'default'; // abort = stop workflow, default = fill defaults (backward compat)
 };
 
 export type AgentDef = {
@@ -35,8 +35,8 @@ export type AgentDef = {
   mode: string; // focused, adversarial, reliable, etc.
   tools?: string[];
   must_produce?: MustProduceItem[];
-  output_schema?: JSONSchema;       // JSON Schema for output validation
-  validation?: ValidationConfig;    // retry/abort on validation failure
+  output_schema?: JSONSchema; // JSON Schema for output validation
+  validation?: ValidationConfig; // retry/abort on validation failure
   inject_context?: string;
   fail_fast?: boolean;
   constraints?: string[];

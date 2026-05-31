@@ -272,11 +272,17 @@ export class WorkflowRunner {
     // JSON Schema validation
     if (agent.output_schema) {
       const validationResult = await this.validateAndRetry(
-        agent, input, output, resolvedContext, phase.id
+        agent,
+        input,
+        output,
+        resolvedContext,
+        phase.id,
       );
       if (validationResult === 'abort') {
         instance.phase_states[phase.id] = 'failed';
-        throw new Error(`Phase "${phase.id}" aborted: output failed schema validation after retries`);
+        throw new Error(
+          `Phase "${phase.id}" aborted: output failed schema validation after retries`,
+        );
       }
       // Merge validated output back
       Object.assign(output, validationResult === 'default' ? output : validationResult);
@@ -312,7 +318,9 @@ export class WorkflowRunner {
       }
 
       const errorSummary = errors.slice(0, 3).join('; ');
-      logger.warn(`[${agent.id}] schema validation failed (attempt ${attempt + 1}/${retries + 1}): ${errorSummary}`);
+      logger.warn(
+        `[${agent.id}] schema validation failed (attempt ${attempt + 1}/${retries + 1}): ${errorSummary}`,
+      );
 
       if (attempt < retries) {
         const retryInput = {

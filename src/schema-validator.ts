@@ -39,7 +39,12 @@ export function validateJsonSchema(
   }
 
   // required fields
-  if (Array.isArray(schema['required']) && typeof data === 'object' && data !== null && !Array.isArray(data)) {
+  if (
+    Array.isArray(schema['required']) &&
+    typeof data === 'object' &&
+    data !== null &&
+    !Array.isArray(data)
+  ) {
     for (const req of schema['required'] as string[]) {
       if (!(req in data)) {
         errors.push(`${path}: missing required field "${req}"`);
@@ -48,8 +53,13 @@ export function validateJsonSchema(
   }
 
   // properties
-  if (typeof schema['properties'] === 'object' && schema['properties'] !== null &&
-      typeof data === 'object' && data !== null && !Array.isArray(data)) {
+  if (
+    typeof schema['properties'] === 'object' &&
+    schema['properties'] !== null &&
+    typeof data === 'object' &&
+    data !== null &&
+    !Array.isArray(data)
+  ) {
     const props = schema['properties'] as Record<string, unknown>;
     for (const [key, subSchema] of Object.entries(props)) {
       if (key in data && typeof subSchema === 'object' && subSchema !== null) {
@@ -83,7 +93,9 @@ export function validateJsonSchema(
   }
   if (typeof schema['maxLength'] === 'number' && typeof data === 'string') {
     if (data.length > (schema['maxLength'] as number)) {
-      errors.push(`${path}: length ${data.length} is greater than maxLength ${schema['maxLength']}`);
+      errors.push(
+        `${path}: length ${data.length} is greater than maxLength ${schema['maxLength']}`,
+      );
     }
   }
 
