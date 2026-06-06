@@ -281,4 +281,30 @@ export type WorkflowInstance = {
   loop_feedback?: Record<string, unknown>;
   started_at?: string;
   completed_at?: string;
+  execution_receipt?: ExecutionReceipt;
+};
+
+// ─── Execution Receipt ──────────────────────────────────────────────
+
+export type ExecutionStep = {
+  phase_id: string;
+  iteration?: number;
+  timestamp: string;
+  state: 'started' | 'completed' | 'failed' | 'retry';
+  error?: string;
+};
+
+export type ExecutionReceipt = {
+  execution_log: ExecutionStep[];
+  tool_calls: Record<string, { count: number; names?: string[] }>;
+  side_effects: { files_written: string[] };
+  checkpoints: { phase_id: string; timestamp: string; iteration?: number }[];
+  failed_steps: { phase_id: string; error: string; iteration?: number }[];
+  resumable: boolean;
+  resume_from_phase?: string;
+};
+
+export type ExecutionMetrics = {
+  tool_calls: number;
+  tool_names?: string[];
 };

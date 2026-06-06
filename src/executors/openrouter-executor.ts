@@ -23,7 +23,7 @@ export class OpenRouterExecutor implements AgentExecutor {
     agent: AgentDef,
     input: Record<string, unknown>,
     context?: ExecutionContext,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<{ output: Record<string, unknown>; metrics?: import('../types.js').ExecutionMetrics }> {
     logger.info(`Executing agent: ${agent.id} (model: ${this.model}, mode: ${agent.mode})`);
     const system = this.buildSystemPrompt(agent, context);
 
@@ -37,7 +37,7 @@ export class OpenRouterExecutor implements AgentExecutor {
       textOutput['code'] = code;
     }
 
-    return this.normalizeOutput(textOutput);
+    return { output: this.normalizeOutput(textOutput), metrics: { tool_calls: 0 } };
   }
 
   private async fetchWithTimeout(body: unknown): Promise<Response> {
