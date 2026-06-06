@@ -2,6 +2,17 @@
 
 All notable changes to AgentFlow DSL will be documented in this file.
 
+## [1.0.18] — 2026-06-06
+
+### Added
+- **ExecutionReceipt**: every workflow run now produces a receipt with execution log (per-phase, per-iteration), tool call counts per agent, side effects (files written), checkpoints, failed steps, and resumability info (`resume_from_phase`)
+- **Tool declaration**: `tools/list` now enriches each MCP tool description with a summary of agents, models, phases, loops, built-in tools, and potential side effects — hosts can see what a workflow does *before* calling it
+- Receipt exposed in `tools/call` response for full MCP transparency
+
+### Changed
+- Executor interface: all executors now return `{ output, metrics }` instead of raw output
+- Removed stray draft files from repo root
+
 ## [1.0.17] — 2026-05-31
 
 ### Added
