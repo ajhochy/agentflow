@@ -33,7 +33,10 @@ export class ClaudeExecutor implements AgentExecutor {
     agent: AgentDef,
     input: Record<string, unknown>,
     context?: ExecutionContext,
-  ): Promise<{ output: Record<string, unknown>; metrics?: import('../types.js').ExecutionMetrics }> {
+  ): Promise<{
+    output: Record<string, unknown>;
+    metrics?: import('../types.js').ExecutionMetrics;
+  }> {
     const system = this.buildSystemPrompt(agent, context);
 
     // Collect real tools for this agent
