@@ -23,7 +23,10 @@ export class OpenRouterExecutor implements AgentExecutor {
     agent: AgentDef,
     input: Record<string, unknown>,
     context?: ExecutionContext,
-  ): Promise<{ output: Record<string, unknown>; metrics?: import('../types.js').ExecutionMetrics }> {
+  ): Promise<{
+    output: Record<string, unknown>;
+    metrics?: import('../types.js').ExecutionMetrics;
+  }> {
     logger.info(`Executing agent: ${agent.id} (model: ${this.model}, mode: ${agent.mode})`);
     const system = this.buildSystemPrompt(agent, context);
 
