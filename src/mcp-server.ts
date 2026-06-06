@@ -175,9 +175,12 @@ async function main() {
               required.push('task');
             }
 
+            // Build declaration summary
+            const declaration = buildDeclaration(ir);
+
             tools.push({
               name: id,
-              description: w.description ?? `Execute workflow: ${id}`,
+              description: declaration,
               inputSchema: {
                 type: 'object',
                 properties,
@@ -237,6 +240,7 @@ async function main() {
                       state: instance.state,
                       phase_outputs: instance.phase_outputs,
                       loop_iterations: instance.loop_iterations,
+                      receipt: instance.execution_receipt ?? null,
                     },
                     null,
                     2,
@@ -256,6 +260,57 @@ async function main() {
       sendResponse(makeError(request.id, -32603, (err as Error).message));
     }
   }
+}
+
+function buildDeclaration(ir: WorkflowIR): string {
+  const w = ir.workflow;
+  const parts: string[] = [];
+
+  // Base description
+  if (w.description) {
+    parts.push(w.description);
+  }
+
+  // Agents
+  const agentIds = Object.keys(w.agents);
+  const models = agentIds
+    .map((id) => w.agents[id].model ?? 'default')
+    .filter((v, i, a) => a.indexOf(v) === i);
+  parts.push(`${agentIds.length} agent(s): ${agentIds.join(', ')}`);
+
+  // Models
+  if (models.length > 0) {
+    parts.push(`Models: ${models.join(', ')}`);
+  }
+
+  // Phases
+  parts.push(`${w.phases.length} phase(s): ${w.phases.map((p) => p.id).join(' → ')}`);
+
+  // Loop
+  if (w.loop) {
+    const loopInfo = w.loop.max_iterations
+      ? `Loop on [${w.loop.phases.join(', ')}] (max ${w.loop.max_iterations} iterations)`
+      : `Loop on [${w.loop.phases.join(', ')}]`;
+    parts.push(loopInfo);
+  }
+
+  // Tools
+  for (const [agentId, agent] of Object.entries(w.agents)) {
+    if (agent.tools?.length) {
+      parts.push(`Agent "${agentId}" has tools: ${agent.tools.join(', ')}`);
+    }
+  }
+
+  // Schema validation
+  const schemas = agentIds.filter((id) => w.agents[id].output_schema);
+  if (schemas.length > 0) {
+    parts.push(`Schema validation on: ${schemas.join(', ')}`);
+  }
+
+  // Output dir (side effects)
+  parts.push('May write output files to disk');
+
+  return parts.join('. ');
 }
 
 function mapType(aflowType: string): string {
