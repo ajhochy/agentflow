@@ -11,6 +11,9 @@ import type {
   WorkflowInstance,
   PhaseState,
   WorkflowState,
+  ExecutionMetrics,
+  ExecutionReceipt,
+  ExecutionStep,
 } from './types.js';
 import { logger } from './logger.js';
 
@@ -32,7 +35,7 @@ export interface AgentExecutor {
     agent: AgentDef,
     input: Record<string, unknown>,
     context?: ExecutionContext,
-  ): Promise<Record<string, unknown>>;
+  ): Promise<{ output: Record<string, unknown>; metrics?: ExecutionMetrics }>;
 }
 
 // Factory che risolve l'executor giusto per ogni agente (in base al suo model)
@@ -50,7 +53,7 @@ export class MockAgentExecutor implements AgentExecutor {
   async execute(
     agent: AgentDef,
     _input: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<{ output: Record<string, unknown>; metrics?: ExecutionMetrics }> {
     const output: Record<string, unknown> = {};
 
     if (agent.must_produce) {
@@ -65,7 +68,7 @@ export class MockAgentExecutor implements AgentExecutor {
       }
     }
 
-    return output;
+    return { output };
   }
 
   private mockValue(type?: string): unknown {
@@ -216,6 +219,22 @@ export class WorkflowRunner {
       throw err;
     } finally {
       instance.completed_at = new Date().toISOString();
+
+      // Compute resumability
+      const receipt = instance.execution_receipt;
+      if (receipt) {
+        receipt.resumable = instance.state === 'paused' || instance.state === 'failed';
+        if (receipt.resumable) {
+          // Find first non-completed phase as resume point
+          for (const phase of this.ir.workflow.phases) {
+            if (instance.phase_states[phase.id] !== 'completed') {
+              receipt.resume_from_phase = phase.id;
+              break;
+            }
+          }
+        }
+      }
+
       this.saveState(instance);
       this.writeManifest(instance);
     }
@@ -251,48 +270,95 @@ export class WorkflowRunner {
     // Risolvi l'executor giusto per questo agente (in base al suo model)
     const executor = this.resolveExecutor(agent);
 
-    // Execute agent
-    const output = await executor.execute(agent, input, resolvedContext);
+    // Track execution start
+    const loopIter = context?.loop?.iteration;
+    this.pushExecutionStep(instance, {
+      phase_id: phase.id,
+      iteration: loopIter,
+      timestamp: new Date().toISOString(),
+      state: 'started',
+    });
 
-    // Verify must_produce — fill missing fields with defaults instead of crashing
-    if (agent.must_produce) {
-      const missing = agent.must_produce
-        .filter((item) => !(item.name in output))
-        .map((item) => item.name);
+    try {
+      // Execute agent
+      const { output, metrics } = await executor.execute(agent, input, resolvedContext);
 
-      if (missing.length > 0) {
-        logger.warn(`[${agent.id}] missing output fields: ${missing.join(', ')} — using defaults`);
-        for (const name of missing) {
-          const item = agent.must_produce.find((m) => m.name === name);
-          output[name] = item?.type === 'float' || item?.type === 'int' ? 0 : '';
+      // Track tool calls
+      if (metrics) {
+        this.getOrCreateReceipt(instance).tool_calls[phase.id] = {
+          count: metrics.tool_calls,
+          names: metrics.tool_names,
+        };
+      }
+
+      // Verify must_produce — fill missing fields with defaults instead of crashing
+      if (agent.must_produce) {
+        const missing = agent.must_produce
+          .filter((item) => !(item.name in output))
+          .map((item) => item.name);
+
+        if (missing.length > 0) {
+          logger.warn(`[${agent.id}] missing output fields: ${missing.join(', ')} — using defaults`);
+          for (const name of missing) {
+            const item = agent.must_produce.find((m) => m.name === name);
+            output[name] = item?.type === 'float' || item?.type === 'int' ? 0 : '';
+          }
         }
       }
-    }
 
-    // JSON Schema validation
-    if (agent.output_schema) {
-      const validationResult = await this.validateAndRetry(
-        agent,
-        input,
-        output,
-        resolvedContext,
-        phase.id,
-      );
-      if (validationResult === 'abort') {
-        instance.phase_states[phase.id] = 'failed';
-        throw new Error(
-          `Phase "${phase.id}" aborted: output failed schema validation after retries`,
+      // JSON Schema validation
+      if (agent.output_schema) {
+        const validationResult = await this.validateAndRetry(
+          agent,
+          input,
+          output,
+          resolvedContext,
+          phase.id,
+          instance,
         );
+        if (validationResult === 'abort') {
+          instance.phase_states[phase.id] = 'failed';
+          const errMsg = `Phase "${phase.id}" aborted: output failed schema validation after retries`;
+          this.trackFailedStep(instance, phase.id, errMsg, loopIter);
+          this.pushExecutionStep(instance, {
+            phase_id: phase.id,
+            iteration: loopIter,
+            timestamp: new Date().toISOString(),
+            state: 'failed',
+            error: errMsg,
+          });
+          throw new Error(errMsg);
+        }
+        // Merge validated output back
+        Object.assign(output, validationResult === 'default' ? output : validationResult);
       }
-      // Merge validated output back
-      Object.assign(output, validationResult === 'default' ? output : validationResult);
-    }
 
-    // Save output
-    instance.phase_outputs[phase.id] = output;
-    instance.phase_states[phase.id] = 'completed';
-    this.saveState(instance);
-    this.writePhaseOutput(phase.id, output);
+      // Save output
+      instance.phase_outputs[phase.id] = output;
+      instance.phase_states[phase.id] = 'completed';
+
+      // Track execution completion
+      this.pushExecutionStep(instance, {
+        phase_id: phase.id,
+        iteration: loopIter,
+        timestamp: new Date().toISOString(),
+        state: 'completed',
+      });
+
+      this.saveState(instance);
+      this.writePhaseOutput(phase.id, output, instance);
+    } catch (err) {
+      const errMsg = (err as Error).message;
+      this.trackFailedStep(instance, phase.id, errMsg, loopIter);
+      this.pushExecutionStep(instance, {
+        phase_id: phase.id,
+        iteration: loopIter,
+        timestamp: new Date().toISOString(),
+        state: 'failed',
+        error: errMsg,
+      });
+      throw err;
+    }
   }
 
   private async validateAndRetry(
@@ -301,6 +367,7 @@ export class WorkflowRunner {
     initialOutput: Record<string, unknown>,
     context: ExecutionContext | undefined,
     _phaseId: string,
+    instance: WorkflowInstance,
   ): Promise<Record<string, unknown> | 'abort' | 'default'> {
     const schema = agent.output_schema!;
     const retries = agent.validation?.retry ?? 0;
@@ -330,7 +397,26 @@ export class WorkflowRunner {
           _retry_instruction: `Your previous output failed validation. Fix these errors and produce valid JSON output:\n${errorSummary}`,
         };
         const executor = this.resolveExecutor(agent);
-        current = await executor.execute(agent, retryInput, context);
+        const retryResult = await executor.execute(agent, retryInput, context);
+        current = retryResult.output;
+        // Track tool calls from retry
+        if (retryResult.metrics) {
+          const receipt = this.getOrCreateReceipt(instance);
+          const existing = receipt.tool_calls[agent.id] ?? { count: 0 };
+          receipt.tool_calls[agent.id] = {
+            count: existing.count + retryResult.metrics.tool_calls,
+            names: [...(existing.names ?? []), ...(retryResult.metrics.tool_names ?? [])],
+          };
+        }
+
+        // Track retry in execution log
+        this.pushExecutionStep(instance, {
+          phase_id: _phaseId,
+          iteration: context?.loop?.iteration,
+          timestamp: new Date().toISOString(),
+          state: 'retry',
+          error: errorSummary,
+        });
       }
     }
 
@@ -546,17 +632,21 @@ export class WorkflowRunner {
     }
   }
 
-  private writePhaseOutput(phaseId: string, output: Record<string, unknown>): void {
+  private writePhaseOutput(phaseId: string, output: Record<string, unknown>, instance: WorkflowInstance): void {
     if (!this.outputDir) return;
     try {
       mkdirSync(this.outputDir, { recursive: true });
 
       // Write full phase output as JSON
-      writeFileSync(join(this.outputDir, `${phaseId}.json`), JSON.stringify(output, null, 2));
+      const outPath = join(this.outputDir, `${phaseId}.json`);
+      writeFileSync(outPath, JSON.stringify(output, null, 2));
+      this.getOrCreateReceipt(instance).side_effects.files_written.push(outPath);
 
       // Extract code fields as standalone files
       if (typeof output['code'] === 'string') {
-        writeFileSync(join(this.outputDir, `${phaseId}.code.ts`), output['code']);
+        const codePath = join(this.outputDir, `${phaseId}.code.ts`);
+        writeFileSync(codePath, output['code']);
+        this.getOrCreateReceipt(instance).side_effects.files_written.push(codePath);
       }
     } catch {
       // Non-critical — don't break workflow for output persistence
@@ -579,7 +669,9 @@ export class WorkflowRunner {
           outputs: Object.keys(instance.phase_outputs[id] ?? {}),
         })),
       };
-      writeFileSync(join(this.outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+      const manifestPath = join(this.outputDir, 'manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+      this.getOrCreateReceipt(instance).side_effects.files_written.push(manifestPath);
     } catch {
       // Non-critical
     }
@@ -672,8 +764,52 @@ export class WorkflowRunner {
     try {
       const filename = `${instance.instance_id}.state.json`;
       writeFileSync(filename, JSON.stringify(instance, null, 2));
+
+      // Track checkpoint
+      const receipt = this.getOrCreateReceipt(instance);
+      const lastCompleted = Object.entries(instance.phase_states)
+        .filter(([, s]) => s === 'completed')
+        .map(([id]) => id)
+        .pop();
+      receipt.checkpoints.push({
+        phase_id: lastCompleted ?? 'start',
+        timestamp: new Date().toISOString(),
+      });
     } catch {
       // Silent fail for state persistence — it's non-critical
     }
+  }
+
+  // ─── Execution Receipt Helpers ────────────────────────────────────
+
+  private getOrCreateReceipt(instance: WorkflowInstance): ExecutionReceipt {
+    if (!instance.execution_receipt) {
+      instance.execution_receipt = {
+        execution_log: [],
+        tool_calls: {},
+        side_effects: { files_written: [] },
+        checkpoints: [],
+        failed_steps: [],
+        resumable: false,
+      };
+    }
+    return instance.execution_receipt;
+  }
+
+  private pushExecutionStep(instance: WorkflowInstance, step: ExecutionStep): void {
+    this.getOrCreateReceipt(instance).execution_log.push(step);
+  }
+
+  private trackFailedStep(
+    instance: WorkflowInstance,
+    phaseId: string,
+    error: string,
+    iteration?: number,
+  ): void {
+    this.getOrCreateReceipt(instance).failed_steps.push({
+      phase_id: phaseId,
+      error,
+      iteration,
+    });
   }
 }

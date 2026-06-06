@@ -33,7 +33,7 @@ export class ClaudeExecutor implements AgentExecutor {
     agent: AgentDef,
     input: Record<string, unknown>,
     context?: ExecutionContext,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<{ output: Record<string, unknown>; metrics?: import('../types.js').ExecutionMetrics }> {
     const system = this.buildSystemPrompt(agent, context);
 
     // Collect real tools for this agent
@@ -54,6 +54,7 @@ export class ClaudeExecutor implements AgentExecutor {
     // If agent has real tools, use auto mode so Claude can choose when to call them
     // Otherwise force tool call (produce_output must be called)
     const hasRealTools = agentTools.length > 0;
+    let totalToolCalls = 0;
 
     for (let round = 0; round < this.maxToolRounds; round++) {
       logger.debug(`[${agent.id}] Tool round ${round + 1}/${this.maxToolRounds}`);
@@ -76,7 +77,10 @@ export class ClaudeExecutor implements AgentExecutor {
         (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'produce_output',
       );
       if (produceOutput) {
-        return produceOutput.input as Record<string, unknown>;
+        return {
+          output: produceOutput.input as Record<string, unknown>,
+          metrics: { tool_calls: totalToolCalls },
+        };
       }
 
       // Collect all tool calls
@@ -97,6 +101,8 @@ export class ClaudeExecutor implements AgentExecutor {
         }
         throw new Error(`[${agent.id}] Unexpected response without tool calls`);
       }
+
+      totalToolCalls += toolCalls.length;
 
       // Execute tool calls and build results
       messages.push({ role: 'assistant', content: response.content as ContentBlock[] });
