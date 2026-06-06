@@ -146,7 +146,7 @@ describe('WorkflowRunner — incremental state saving', () => {
 
     // Executor che non produce nulla
     const badExecutor = {
-      execute: async () => ({}),
+      execute: async () => ({ output: {} }),
     };
 
     const runner = new WorkflowRunner(ir, badExecutor);
@@ -212,7 +212,7 @@ describe('WorkflowRunner — resume', () => {
     const trackingExecutor = {
       execute: async () => {
         executionCount++;
-        return { code: 'const y = 2;', summary: 'resumed' };
+        return { output: { code: 'const y = 2;', summary: 'resumed' } };
       },
     };
 
@@ -353,7 +353,7 @@ describe('WorkflowRunner — resume mid-loop', () => {
             }
           }
         }
-        return output;
+        return { output };
       },
     };
 
@@ -432,8 +432,10 @@ describe('WorkflowRunner — output to disk', () => {
     // Executor che produce codice reale nel campo "code"
     const codeExecutor = {
       execute: async () => ({
-        code: 'export function hello() { return "world"; }',
-        summary: 'implemented hello function',
+        output: {
+          code: 'export function hello() { return "world"; }',
+          summary: 'implemented hello function',
+        },
       }),
     };
 
@@ -547,9 +549,9 @@ describe('WorkflowRunner — done_when + confidence', () => {
     const executor = {
       execute: async (agent: { id: string; must_produce?: { name: string }[] }) => {
         if (agent.id === 'critic') {
-          return { verdict: 'approved', confidence: 0.95 };
+          return { output: { verdict: 'approved', confidence: 0.95 } };
         }
-        return { code: 'const x = 1;' };
+        return { output: { code: 'const x = 1;' } };
       },
     };
 
@@ -566,9 +568,9 @@ describe('WorkflowRunner — done_when + confidence', () => {
     const executor = {
       execute: async (agent: { id: string; must_produce?: { name: string }[] }) => {
         if (agent.id === 'critic') {
-          return { verdict: 'approved', confidence: 0.6 };
+          return { output: { verdict: 'approved', confidence: 0.6 } };
         }
-        return { code: 'const x = 1;' };
+        return { output: { code: 'const x = 1;' } };
       },
     };
 
@@ -588,11 +590,11 @@ describe('WorkflowRunner — done_when + confidence', () => {
           iterations++;
           // Iterazione 1: needs_work. Iterazione 2: approved + alta confidence
           if (iterations >= 2) {
-            return { verdict: 'approved', confidence: 0.95 };
+            return { output: { verdict: 'approved', confidence: 0.95 } };
           }
-          return { verdict: 'needs_work', confidence: 0.3 };
+          return { output: { verdict: 'needs_work', confidence: 0.3 } };
         }
-        return { code: 'const x = 1;' };
+        return { output: { code: 'const x = 1;' } };
       },
     };
 
@@ -621,9 +623,9 @@ describe('WorkflowRunner — done_when + confidence', () => {
     const executor = {
       execute: async (agent: { id: string }) => {
         if (agent.id === 'critic') {
-          return { verdict: 'approved', confidence: 0.85 };
+          return { output: { verdict: 'approved', confidence: 0.85 } };
         }
-        return { code: 'x' };
+        return { output: { code: 'x' } };
       },
     };
 
@@ -662,9 +664,9 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
       ) => {
         receivedContexts.push({ agent: agent.id, context });
         if (agent.id === 'critic') {
-          return { verdict: 'approved', confidence: 0.95 };
+          return { output: { verdict: 'approved', confidence: 0.95 } };
         }
-        return { code: 'x' };
+        return { output: { code: 'x' } };
       },
     };
 
@@ -698,9 +700,9 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
           capturedCriteria = context.loop.acceptance_criteria;
         }
         if (agent.id === 'critic') {
-          return { verdict: 'approved', confidence: 0.95 };
+          return { output: { verdict: 'approved', confidence: 0.95 } };
         }
-        return { code: 'x' };
+        return { output: { code: 'x' } };
       },
     };
 
@@ -729,11 +731,11 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
           callCount++;
           if (context?.loop) iterationsSeen.push(context.loop.iteration);
           if (callCount >= 2) {
-            return { verdict: 'approved', confidence: 0.95 };
+            return { output: { verdict: 'approved', confidence: 0.95 } };
           }
-          return { verdict: 'needs_work', confidence: 0.4 };
+          return { output: { verdict: 'needs_work', confidence: 0.4 } };
         }
-        return { code: 'x' };
+        return { output: { code: 'x' } };
       },
     };
 
@@ -798,9 +800,9 @@ describe('WorkflowRunner — convergenza critic (ExecutionContext)', () => {
         context?: any,
       ) => {
         contexts.push({ agent: agent.id, hasLoop: !!context?.loop });
-        if (agent.id === 'critic') return { verdict: 'approved', confidence: 0.95 };
-        if (agent.id === 'planner') return { plan: 'do stuff' };
-        return { code: 'x' };
+        if (agent.id === 'critic') return { output: { verdict: 'approved', confidence: 0.95 } };
+        if (agent.id === 'planner') return { output: { plan: 'do stuff' } };
+        return { output: { code: 'x' } };
       },
     };
 
@@ -883,8 +885,8 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
         if (agent.id === 'writer' && context?.injectedContext) {
           capturedContext = context.injectedContext;
         }
-        if (agent.id === 'critic') return { verdict: 'approved', confidence: 0.9 };
-        return { code: 'const x = 1;' };
+        if (agent.id === 'critic') return { output: { verdict: 'approved', confidence: 0.9 } };
+        return { output: { code: 'const x = 1;' } };
       },
     };
 
@@ -909,8 +911,8 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
         if (agent.id === 'critic' && context?.injectedContext) {
           criticGotContext = true;
         }
-        if (agent.id === 'critic') return { verdict: 'approved', confidence: 0.9 };
-        return { code: 'const x = 1;' };
+        if (agent.id === 'critic') return { output: { verdict: 'approved', confidence: 0.9 } };
+        return { output: { code: 'const x = 1;' } };
       },
     };
 
@@ -953,7 +955,7 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
     const executor = {
       execute: async (_agent: { id: string }, _input: Record<string, unknown>, context?: any) => {
         if (context?.injectedContext) gotInjected = true;
-        return { code: 'x' };
+        return { output: { code: 'x' } };
       },
     };
 
@@ -991,7 +993,7 @@ describe('WorkflowRunner — inject_context / rules_file', () => {
     const executor = {
       execute: async (agent: { id: string }, _input: Record<string, unknown>, context?: any) => {
         capturedContext = context?.injectedContext;
-        return { code: 'x' };
+        return { output: { code: 'x' } };
       },
     };
 
