@@ -129,7 +129,8 @@ Copy the JSON output to your Claude Code MCP settings. Your workflow is now a to
 
 | Provider | Status | Notes |
 |---|---|---|
-| **Claude** (Anthropic) | ✅ | Native SDK, multi-round tool use |
+| **Claude** (Anthropic) | ✅ | Native SDK, multi-round tool use, API key (pay-as-you-go) |
+| **Claude Agent SDK** | ✅ | Subscription auth — uses your plan's monthly Agent SDK credit |
 | **OpenRouter** | ✅ | 315+ models, automatic provider routing |
 | **Ollama** | ✅ | Local execution, no API key needed |
 
@@ -140,10 +141,31 @@ Configure model aliases for cost optimization — use cheap models for drafting,
   "models": {
     "local-fast":       { "provider": "ollama",      "model": "qwen3:8b" },
     "openrouter-smart": { "provider": "openrouter",  "model": "google/gemini-2.5-flash" },
-    "claude-sonnet":    { "provider": "claude",      "model": "claude-sonnet-4-5" }
+    "claude-sonnet":    { "provider": "claude",      "model": "claude-sonnet-4-5" },
+    "claude-plan":      { "provider": "agent-sdk",   "model": "claude-sonnet-4-5" }
   }
 }
 ```
+
+### Run on your Claude subscription (no API credits)
+
+The `agent-sdk` provider routes agents through the [Claude Agent SDK](https://platform.claude.com/docs/en/agent-sdk/overview) using your Claude login instead of an API key. Usage draws from your plan's [monthly Agent SDK credit](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan) (Pro $20, Max 5x $100, Max 20x $200 — starting June 15, 2026), not from pay-as-you-go API billing.
+
+Setup:
+
+```bash
+npm install @anthropic-ai/claude-agent-sdk   # optional dependency
+claude login                                  # Claude Code must be logged in
+```
+
+Then point an agent (or alias) at the provider:
+
+```aflow
+agent writer
+  model: "claude-plan"
+```
+
+Note: if `ANTHROPIC_API_KEY` is set, the Agent SDK would silently bill your API account instead — AgentFlow unsets it for `agent-sdk` agents so usage stays on the subscription credit.
 
 ## CLI Reference
 

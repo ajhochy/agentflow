@@ -9,6 +9,7 @@ import { ClaudeExecutor } from './executors/claude-executor.js';
 import { OllamaExecutor } from './executors/ollama-executor.js';
 import { OpenRouterExecutor } from './executors/openrouter-executor.js';
 import { HermesExecutor } from './executors/hermes-executor.js';
+import { AgentSdkExecutor } from './executors/agent-sdk-executor.js';
 import { resolveModel } from './model-resolver.js';
 import { createBuiltinRegistry } from './tools/index.js';
 import type { AgentDef } from './types.js';
@@ -171,7 +172,10 @@ async function main() {
               }
             } else {
               // Default schema
-              properties['task'] = { type: 'string', description: 'Task description' };
+              properties['task'] = {
+                type: 'string',
+                description: 'Task description',
+              };
               required.push('task');
             }
 
@@ -220,6 +224,8 @@ async function main() {
                 return new OpenRouterExecutor(cfg.model);
               case 'hermes':
                 return new HermesExecutor();
+              case 'agent-sdk':
+                return new AgentSdkExecutor(cfg.model);
               default:
                 return new OllamaExecutor(cfg);
             }

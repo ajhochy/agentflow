@@ -14,6 +14,7 @@ import { createBuiltinRegistry } from './tools/index.js';
 import { runInit } from './commands/init.js';
 import { OpenRouterExecutor } from './executors/openrouter-executor.js';
 import { HermesExecutor } from './executors/hermes-executor.js';
+import { AgentSdkExecutor } from './executors/agent-sdk-executor.js';
 import type { WorkflowIR, AgentDef } from './types.js';
 
 function loadAndCompile(filePath: string): WorkflowIR {
@@ -42,6 +43,8 @@ function createExecutorResolver(
         return new OpenRouterExecutor(modelConfig.model);
       case 'hermes':
         return new HermesExecutor();
+      case 'agent-sdk':
+        return new AgentSdkExecutor(modelConfig.model);
       case 'ollama':
       default:
         return new OllamaExecutor(modelConfig);
@@ -444,7 +447,9 @@ program
 
     try {
       const ollamaBase = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
-      const res = await fetch(`${ollamaBase}/api/tags`, { signal: AbortSignal.timeout(2000) });
+      const res = await fetch(`${ollamaBase}/api/tags`, {
+        signal: AbortSignal.timeout(2000),
+      });
       if (res.ok) {
         const data = (await res.json()) as { models: Array<{ name: string }> };
         console.log(
