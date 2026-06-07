@@ -161,12 +161,14 @@ export function validate(ir: WorkflowIR): ValidationResult {
     }
   }
 
-  // S11: dangling references — every `x.field` ref must point to a defined phase or "trigger"
+  // S11: dangling references — every `x.field` ref must point to a defined phase,
+  // a defined agent (runtime resolves agent-named outputs), or "trigger"
   {
     const phaseIds = new Set(phases.map((p) => p.id));
+    const agentIds = new Set(Object.keys(agents));
     const validPrefix = (ref: string): boolean => {
       const prefix = ref.split('.')[0];
-      return prefix === 'trigger' || phaseIds.has(prefix);
+      return prefix === 'trigger' || phaseIds.has(prefix) || agentIds.has(prefix);
     };
 
     // phase.input refs
@@ -175,7 +177,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
         if (ref.includes('.') && !validPrefix(ref)) {
           errors.push({
             rule: 'S11',
-            message: `Phase "${phase.id}" input references "${ref}" but "${ref.split('.')[0]}" is not a defined phase (or "trigger").`,
+            message: `Phase "${phase.id}" input references "${ref}" but "${ref.split('.')[0]}" is not a defined phase, agent, or "trigger".`,
             phase: phase.id,
           });
         }
@@ -189,7 +191,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
       if (!validPrefix(ref)) {
         errors.push({
           rule: 'S11',
-          message: `done_when references "${ref}" but "${ref.split('.')[0]}" is not a defined phase (or "trigger") — the condition would never be satisfied.`,
+          message: `done_when references "${ref}" but "${ref.split('.')[0]}" is not a defined phase, agent, or "trigger" — the condition would never be satisfied.`,
         });
       }
     }
@@ -202,7 +204,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
         if (!validPrefix(ref)) {
           errors.push({
             rule: 'S11',
-            message: `Loop "${loop.id}" repeat_while references "${ref}" but "${ref.split('.')[0]}" is not a defined phase (or "trigger").`,
+            message: `Loop "${loop.id}" repeat_while references "${ref}" but "${ref.split('.')[0]}" is not a defined phase, agent, or "trigger".`,
           });
         }
       }
@@ -212,7 +214,7 @@ export function validate(ir: WorkflowIR): ValidationResult {
       if (payload && /^[A-Za-z_]\w*\.[A-Za-z_][\w.]*$/.test(payload) && !validPrefix(payload)) {
         errors.push({
           rule: 'S11',
-          message: `Loop "${loop.id}" on_each_iteration payload references "${payload}" but "${payload.split('.')[0]}" is not a defined phase (or "trigger").`,
+          message: `Loop "${loop.id}" on_each_iteration payload references "${payload}" but "${payload.split('.')[0]}" is not a defined phase, agent, or "trigger".`,
         });
       }
       const sendTo = loop.on_each_iteration?.send_to;
@@ -264,6 +266,20 @@ export function validate(ir: WorkflowIR): ValidationResult {
         rule: 'S12',
         message: `Workflow declares a rollback config — parsed but NOT executed by the current runtime (see ROADMAP).`,
       });
+    }
+  }
+
+  // S13: irreversible phase inside a loop — approval covers every iteration, so re-execution is a risk
+  if (loop) {
+    const loopPhaseIds = new Set(loop.phases);
+    for (const phase of phases) {
+      if (phase.irreversible && loopPhaseIds.has(phase.id)) {
+        warnings.push({
+          rule: 'S13',
+          message: `Irreversible phase "${phase.id}" is inside loop "${loop.id}" — a single approval allows it to execute on EVERY iteration (up to ${loop.max_iterations ?? '∞'} times).`,
+          phase: phase.id,
+        });
+      }
     }
   }
 

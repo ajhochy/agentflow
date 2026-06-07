@@ -13,6 +13,12 @@ All notable changes to AgentFlow DSL will be documented in this file.
 - **S12 validation (honest runtime)**: workflows using parsed-but-not-executed features (`human_action_required`, `streaming_batch`, `poll`, `retry`, `timeout`, `rollback_on_fail`, `completes_when`, `instruction_to_user`, `on_timeout`, workflow `rollback`) now get an explicit warning
 - **Literal loop payloads**: `on_each_iteration.payload` accepts a literal message (e.g. `"Expand to 50 words."`) in addition to `phase.field` references — previously literals silently resolved to `undefined`
 
+- **Irreversibility gate**: phases marked `irreversible: true` (money, deploys, deletions) never execute without explicit approval. Without it the workflow pauses at the gate (`state: paused`, `gated` event in the receipt) and can be resumed after review: CLI `--approve-irreversible` on `run`/`resume`, MCP `approve_irreversible: true` argument
+- **`agentflow_resume` MCP tool**: resume paused instances (gate or graceful shutdown) directly from the MCP host, with optional `approve_irreversible`
+- `WorkflowRunner.resumeStart()`: non-blocking resume returning the live instance + completion promise
+- **S13 validation**: warning when an irreversible phase is inside a loop (one approval covers every iteration)
+- New example `deploy-gate.aflow`: build → review → deploy with the gate on deploy
+
 ### Fixed
 - `custom-domain.aflow` example: `done when` referenced the agent `health_checker` instead of the phase `verify` (caught by S11)
 - **AgentSdkExecutor** (`provider: "agent-sdk"`): run agents through the Claude Agent SDK with subscription authentication. Usage draws from the plan's monthly Agent SDK credit (Pro $20, Max 5x $100, Max 20x $200 — from June 15, 2026) instead of pay-as-you-go API credits. Requires Claude Code logged in (`claude login`) and the optional dependency `@anthropic-ai/claude-agent-sdk`

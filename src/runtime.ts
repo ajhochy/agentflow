@@ -104,15 +104,19 @@ export class WorkflowRunner {
   private resolveExecutor: ExecutorResolver;
   private outputDir?: string;
   private aborted = false;
+  private approveIrreversible: boolean;
+  /** Set when execution stops at an unapproved irreversible phase */
+  private gatedPhase: string | null = null;
 
   constructor(
     ir: WorkflowIR,
     executor: AgentExecutor | ExecutorResolver,
-    options?: { outputDir?: string },
+    options?: { outputDir?: string; approveIrreversible?: boolean },
   ) {
     this.ir = ir;
     this.resolveExecutor = typeof executor === 'function' ? executor : () => executor;
     this.outputDir = options?.outputDir;
+    this.approveIrreversible = options?.approveIrreversible ?? false;
   }
 
   /** Register signal handlers for graceful shutdown. Call once before run(). */
@@ -143,6 +147,14 @@ export class WorkflowRunner {
   }
 
   async resume(instanceId: string): Promise<WorkflowInstance> {
+    return this.resumeStart(instanceId).done;
+  }
+
+  /** Non-blocking variant of resume(): returns the live instance + completion promise. */
+  resumeStart(instanceId: string): {
+    instance: WorkflowInstance;
+    done: Promise<WorkflowInstance>;
+  } {
     const instance = this.loadState(instanceId);
 
     if (instance.workflow_id !== this.ir.workflow.id) {
@@ -155,7 +167,7 @@ export class WorkflowRunner {
     }
 
     instance.state = 'running';
-    return this.execute(instance);
+    return { instance, done: this.execute(instance) };
   }
 
   private createInstance(triggerInput: Record<string, unknown>): WorkflowInstance {
@@ -187,7 +199,7 @@ export class WorkflowRunner {
 
       // Execute non-loop phases that come before loop phases
       for (const phase of this.ir.workflow.phases) {
-        if (this.aborted) break;
+        if (this.aborted || this.gatedPhase) break;
         if (loopPhaseIds.has(phase.id)) continue;
         if (instance.phase_states[phase.id] === 'completed') continue;
 
@@ -202,16 +214,32 @@ export class WorkflowRunner {
       }
 
       // Execute loop if present
-      if (loop && !this.aborted) {
+      if (loop && !this.aborted && !this.gatedPhase) {
         await this.executeLoop(loop, instance);
       }
 
       // Execute non-loop phases that come after loop phases
       for (const phase of this.ir.workflow.phases) {
-        if (this.aborted) break;
+        if (this.aborted || this.gatedPhase) break;
         if (loopPhaseIds.has(phase.id)) continue;
         if (instance.phase_states[phase.id] === 'completed') continue;
         await this.executePhase(phase, instance);
+      }
+
+      if (this.gatedPhase) {
+        instance.state = 'paused';
+        const receipt = this.getOrCreateReceipt(instance);
+        receipt.execution_log.push({
+          phase_id: this.gatedPhase,
+          timestamp: new Date().toISOString(),
+          state: 'gated',
+        });
+        logger.warn(
+          `[gate] Phase "${this.gatedPhase}" is marked irreversible and approval was not granted. ` +
+            `Workflow paused (instance ${instance.instance_id}). ` +
+            `Resume with explicit approval to execute it.`,
+        );
+        return instance;
       }
 
       if (this.aborted) {
@@ -263,6 +291,12 @@ export class WorkflowRunner {
     instance: WorkflowInstance,
     context?: ExecutionContext,
   ): Promise<void> {
+    // Irreversibility gate: never execute an irreversible phase without explicit approval
+    if (phase.irreversible && !this.approveIrreversible) {
+      this.gatedPhase = phase.id;
+      return;
+    }
+
     const agent = this.ir.workflow.agents[phase.agent];
     if (!agent) {
       throw new Error(`Agent "${phase.agent}" not found for phase "${phase.id}"`);
@@ -459,7 +493,7 @@ export class WorkflowRunner {
       .filter((p): p is PhaseDef => p !== undefined);
 
     do {
-      if (this.aborted) break;
+      if (this.aborted || this.gatedPhase) break;
       iteration++;
       instance.loop_iterations[loop.id] = iteration;
 
@@ -509,6 +543,7 @@ export class WorkflowRunner {
           },
         };
         await this.executePhase(phase, instance, loopContext);
+        if (this.gatedPhase) return;
       }
 
       // Early exit: if done_when is already satisfied, break immediately

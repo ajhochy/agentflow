@@ -256,6 +256,23 @@ describe('Validator', () => {
     expect(s11.length).toBe(3); // repeat_while + payload + send_to
   });
 
+  test('S11: ref per agent-id (runtime li risolve) → nessun errore', () => {
+    const ir = makeIR({
+      agents: {
+        health_checker: makeAgent('health_checker', { must_produce: [{ name: 'ssl_valid' }] }),
+      },
+      phases: [makePhase('verify', { agent: 'health_checker', output: ['ssl_valid'] })],
+      done_when: {
+        kind: 'compare',
+        left: { kind: 'ref', path: 'health_checker.ssl_valid' },
+        op: '==',
+        right: { kind: 'literal', value: true },
+      },
+    });
+    const result = validate(ir);
+    expect(result.errors.some((e) => e.rule === 'S11')).toBe(false);
+  });
+
   test('S11: payload letterale (frase) → nessun errore', () => {
     const ir = makeIR({
       agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },

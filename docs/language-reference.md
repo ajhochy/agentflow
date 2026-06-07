@@ -106,7 +106,17 @@ phase <id>
   output: [<name>, ...]
   inject_context: "<path>"
   timeout: <duration>
+  irreversible: true       # phase touches money/deploys/deletions — requires explicit approval
 ```
+
+### irreversible
+
+A phase marked `irreversible: true` never executes without explicit approval. Without it, the workflow **pauses at the gate** (`state: paused`, a `gated` event in the execution receipt) so the state can be reviewed first:
+
+- CLI: `agentflow run … --approve-irreversible`, or resume a paused instance with `agentflow resume <file> --instance <uuid> --approve-irreversible`
+- MCP: pass `approve_irreversible: true` in the tool call, or resume with the `agentflow_resume` tool
+
+Validation S13 warns if an irreversible phase sits inside a loop — a single approval covers every iteration.
 
 ### Input References
 
