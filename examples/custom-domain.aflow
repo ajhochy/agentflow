@@ -147,4 +147,4 @@ workflow custom_domain_provisioning
       message: "Your custom domain is now active!"
       attach: [verify.domain_resolves, verify.ssl_valid]
 
-  done when: health_checker.domain_resolves == true and health_checker.ssl_valid == true
+  done when: verify.domain_resolves == true and verify.ssl_valid == true

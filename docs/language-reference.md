@@ -141,12 +141,14 @@ loop <id>
   max_iterations: <n>
   on_each_iteration:
     send_to: <agent_id>
-    payload: <ref>
+    payload: <ref or literal>   # phase.field reference, or a literal feedback message
   on_max_exceeded:
     escalate_to: <agent_id>
     message: "<text>"
     attach: [<ref>, ...]
 ```
+
+`payload` accepts either a `phase.field` reference (e.g. `edit.suggestions`) — resolved at each iteration — or any other string, passed verbatim as feedback to the `send_to` agent (e.g. `"Too short. Expand to at least 50 words."`).
 
 - Phases must be contiguous in the workflow definition
 - `repeat_while` is evaluated after each complete iteration

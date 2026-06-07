@@ -1,4 +1,25 @@
-import type { WorkflowIR, ValidationResult, ValidationIssue } from './types.js';
+import type { WorkflowIR, ValidationResult, ValidationIssue, Condition } from './types.js';
+
+/** Collect all `phase.field` reference paths inside a condition tree. */
+function collectConditionRefs(cond: Condition | undefined, out: string[]): void {
+  if (!cond) return;
+  switch (cond.kind) {
+    case 'compare':
+      for (const side of [cond.left, cond.right]) {
+        if (side && typeof side === 'object' && 'kind' in side && side.kind === 'ref') {
+          out.push((side as { path: string }).path);
+        }
+      }
+      break;
+    case 'and':
+    case 'or':
+      for (const c of cond.conditions) collectConditionRefs(c, out);
+      break;
+    case 'not':
+      collectConditionRefs(cond.condition, out);
+      break;
+  }
+}
 
 export function validate(ir: WorkflowIR): ValidationResult {
   const errors: ValidationIssue[] = [];
@@ -136,6 +157,112 @@ export function validate(ir: WorkflowIR): ValidationResult {
         rule: 'S10',
         message: `Phase "${phase.id}" has both poll and retry — this is not allowed.`,
         phase: phase.id,
+      });
+    }
+  }
+
+  // S11: dangling references — every `x.field` ref must point to a defined phase or "trigger"
+  {
+    const phaseIds = new Set(phases.map((p) => p.id));
+    const validPrefix = (ref: string): boolean => {
+      const prefix = ref.split('.')[0];
+      return prefix === 'trigger' || phaseIds.has(prefix);
+    };
+
+    // phase.input refs
+    for (const phase of phases) {
+      for (const ref of phase.input ?? []) {
+        if (ref.includes('.') && !validPrefix(ref)) {
+          errors.push({
+            rule: 'S11',
+            message: `Phase "${phase.id}" input references "${ref}" but "${ref.split('.')[0]}" is not a defined phase (or "trigger").`,
+            phase: phase.id,
+          });
+        }
+      }
+    }
+
+    // done_when refs
+    const doneRefs: string[] = [];
+    collectConditionRefs(ir.workflow.done_when, doneRefs);
+    for (const ref of doneRefs) {
+      if (!validPrefix(ref)) {
+        errors.push({
+          rule: 'S11',
+          message: `done_when references "${ref}" but "${ref.split('.')[0]}" is not a defined phase (or "trigger") — the condition would never be satisfied.`,
+        });
+      }
+    }
+
+    // loop refs: repeat_while, on_each_iteration payload/send_to, on_max_exceeded escalate_to
+    if (loop) {
+      const loopRefs: string[] = [];
+      collectConditionRefs(loop.repeat_while, loopRefs);
+      for (const ref of loopRefs) {
+        if (!validPrefix(ref)) {
+          errors.push({
+            rule: 'S11',
+            message: `Loop "${loop.id}" repeat_while references "${ref}" but "${ref.split('.')[0]}" is not a defined phase (or "trigger").`,
+          });
+        }
+      }
+      // payload: only validate strings shaped like a reference ("phase.field");
+      // anything else is treated as a literal feedback message by the runtime
+      const payload = loop.on_each_iteration?.payload;
+      if (payload && /^[A-Za-z_]\w*\.[A-Za-z_][\w.]*$/.test(payload) && !validPrefix(payload)) {
+        errors.push({
+          rule: 'S11',
+          message: `Loop "${loop.id}" on_each_iteration payload references "${payload}" but "${payload.split('.')[0]}" is not a defined phase (or "trigger").`,
+        });
+      }
+      const sendTo = loop.on_each_iteration?.send_to;
+      if (sendTo && !agents[sendTo]) {
+        errors.push({
+          rule: 'S11',
+          message: `Loop "${loop.id}" on_each_iteration send_to references undefined agent "${sendTo}".`,
+        });
+      }
+      // escalate_to may name a human/external target — escalation is log-only today, so warn
+      const escalateTo = loop.on_max_exceeded?.escalate_to;
+      if (escalateTo && !agents[escalateTo]) {
+        warnings.push({
+          rule: 'S11',
+          message: `Loop "${loop.id}" on_max_exceeded escalate_to "${escalateTo}" is not a defined agent — escalation is currently log-only, so this is allowed but unenforced.`,
+        });
+      }
+    }
+  }
+
+  // S12: features that parse but are not executed by the current runtime — warn loudly
+  {
+    const IGNORED_PHASE_FEATURES: Array<[string, (p: (typeof phases)[number]) => boolean]> = [
+      ['type (non-standard)', (p) => p.type !== undefined && p.type !== 'standard'],
+      ['poll', (p) => p.poll !== undefined],
+      ['retry', (p) => p.retry !== undefined],
+      ['timeout', (p) => p.timeout !== undefined],
+      ['rollback_on_fail', (p) => p.rollback_on_fail !== undefined],
+      ['completes_when', (p) => p.completes_when !== undefined],
+      ['instruction_to_user', (p) => p.instruction_to_user !== undefined],
+      ['on_timeout', (p) => p.on_timeout !== undefined],
+    ];
+
+    for (const phase of phases) {
+      const ignored = IGNORED_PHASE_FEATURES.filter(([, test]) => test(phase)).map(
+        ([name]) => name,
+      );
+      if (ignored.length > 0) {
+        warnings.push({
+          rule: 'S12',
+          message: `Phase "${phase.id}" uses ${ignored.join(', ')} — parsed but NOT executed by the current runtime (see ROADMAP).`,
+          phase: phase.id,
+        });
+      }
+    }
+
+    if (ir.workflow.rollback) {
+      warnings.push({
+        rule: 'S12',
+        message: `Workflow declares a rollback config — parsed but NOT executed by the current runtime (see ROADMAP).`,
       });
     }
   }

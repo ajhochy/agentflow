@@ -489,10 +489,11 @@ export class WorkflowRunner {
         ) {
           const payloadRef = loop.on_each_iteration.payload;
           if (payloadRef) {
-            const feedbackValue = this.resolveValue(
-              { kind: 'ref', path: payloadRef } as ValueExpr,
-              instance,
-            );
+            // "phase.field" → resolve as reference; anything else is a literal message
+            const isRef = /^[A-Za-z_]\w*\.[A-Za-z_][\w.]*$/.test(payloadRef);
+            const feedbackValue = isRef
+              ? this.resolveValue({ kind: 'ref', path: payloadRef } as ValueExpr, instance)
+              : payloadRef;
             if (!instance.loop_feedback) instance.loop_feedback = {};
             instance.loop_feedback[phase.id] = feedbackValue;
           }

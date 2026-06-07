@@ -9,6 +9,12 @@ All notable changes to AgentFlow DSL will be documented in this file.
 - **`agentflow_status` tool**: poll a running instance for live per-phase progress, loop iterations, execution receipt, and (once finished) phase outputs
 - `WorkflowRunner.start()`: non-blocking API returning the live instance plus a completion promise (`run()` unchanged)
 - **Mock mode for the MCP server**: `AGENTFLOW_MOCK=1` runs workflows with mock executors (no API keys needed); `AGENTFLOW_MOCK_DELAY_MS` simulates slow agents
+- **S11 validation (dangling references)**: references to undefined phases in `input:`, `done when`, `repeat_while`, and ref-shaped loop payloads now fail validation instead of failing silently at runtime; undefined `send_to` agents are errors, undefined `escalate_to` targets are warnings (escalation is log-only today)
+- **S12 validation (honest runtime)**: workflows using parsed-but-not-executed features (`human_action_required`, `streaming_batch`, `poll`, `retry`, `timeout`, `rollback_on_fail`, `completes_when`, `instruction_to_user`, `on_timeout`, workflow `rollback`) now get an explicit warning
+- **Literal loop payloads**: `on_each_iteration.payload` accepts a literal message (e.g. `"Expand to 50 words."`) in addition to `phase.field` references — previously literals silently resolved to `undefined`
+
+### Fixed
+- `custom-domain.aflow` example: `done when` referenced the agent `health_checker` instead of the phase `verify` (caught by S11)
 - **AgentSdkExecutor** (`provider: "agent-sdk"`): run agents through the Claude Agent SDK with subscription authentication. Usage draws from the plan's monthly Agent SDK credit (Pro $20, Max 5x $100, Max 20x $200 — from June 15, 2026) instead of pay-as-you-go API credits. Requires Claude Code logged in (`claude login`) and the optional dependency `@anthropic-ai/claude-agent-sdk`
 - New built-in model alias `claude-plan` → `agent-sdk` / `claude-sonnet-4-5`
 - Safety: the executor unsets `ANTHROPIC_API_KEY` for the process (the SDK would give it precedence, silently billing the API account instead of the subscription credit)
