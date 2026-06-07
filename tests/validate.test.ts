@@ -172,7 +172,9 @@ describe('Validator', () => {
   test('S11: input che referenzia fase inesistente → error', () => {
     const ir = makeIR({
       agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
-      phases: [makePhase('write', { agent: 'writer', input: ['ghost_phase.field'], output: ['draft'] })],
+      phases: [
+        makePhase('write', { agent: 'writer', input: ['ghost_phase.field'], output: ['draft'] }),
+      ],
     });
     const result = validate(ir);
     expect(result.errors.some((e) => e.rule === 'S11')).toBe(true);
@@ -185,7 +187,11 @@ describe('Validator', () => {
         writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }),
       },
       phases: [
-        makePhase('research', { agent: 'researcher', input: ['trigger.topic'], output: ['outline'] }),
+        makePhase('research', {
+          agent: 'researcher',
+          input: ['trigger.topic'],
+          output: ['outline'],
+        }),
         makePhase('write', { agent: 'writer', input: ['research.outline'], output: ['draft'] }),
       ],
     });
