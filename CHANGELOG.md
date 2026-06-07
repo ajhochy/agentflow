@@ -5,6 +5,10 @@ All notable changes to AgentFlow DSL will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Async MCP execution**: `tools/call` no longer blocks until the workflow finishes. Fast workflows (< `AGENTFLOW_SYNC_TIMEOUT_MS`, default 45s) still return their full result synchronously; longer ones return `{state: "running", instance_id}` immediately — no more MCP client timeouts
+- **`agentflow_status` tool**: poll a running instance for live per-phase progress, loop iterations, execution receipt, and (once finished) phase outputs
+- `WorkflowRunner.start()`: non-blocking API returning the live instance plus a completion promise (`run()` unchanged)
+- **Mock mode for the MCP server**: `AGENTFLOW_MOCK=1` runs workflows with mock executors (no API keys needed); `AGENTFLOW_MOCK_DELAY_MS` simulates slow agents
 - **AgentSdkExecutor** (`provider: "agent-sdk"`): run agents through the Claude Agent SDK with subscription authentication. Usage draws from the plan's monthly Agent SDK credit (Pro $20, Max 5x $100, Max 20x $200 — from June 15, 2026) instead of pay-as-you-go API credits. Requires Claude Code logged in (`claude login`) and the optional dependency `@anthropic-ai/claude-agent-sdk`
 - New built-in model alias `claude-plan` → `agent-sdk` / `claude-sonnet-4-5`
 - Safety: the executor unsets `ANTHROPIC_API_KEY` for the process (the SDK would give it precedence, silently billing the API account instead of the subscription credit)

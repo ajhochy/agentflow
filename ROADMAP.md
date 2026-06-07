@@ -27,11 +27,11 @@ Updated June 2026 to reflect the actual state of the project (v1.0.18 on npm).
 
 ## Next — Production hardening (highest priority)
 
-- [ ] **Async MCP execution** — long workflows exceed MCP client timeouts today. Return an `instance_id` immediately, add a `get_status` tool for polling (or MCP progress notifications). Kill orphaned runs on client disconnect.
+- [x] **Async MCP execution** — `tools/call` returns `{state: "running", instance_id}` after a short sync-wait (`AGENTFLOW_SYNC_TIMEOUT_MS`); poll with the `agentflow_status` tool. Still open: kill orphaned runs on client disconnect, MCP progress notifications.
 - [ ] **Honest runtime** — `rollback_on_fail`, `human_action_required`, and `streaming_batch` are parsed but silently ignored at runtime. Either implement them or reject them at validation until they work.
 - [ ] **S11 validation** — fail validation on references to undefined phases in `input:` and `done when` (today they pass and fail silently at runtime).
 - [ ] **Irreversibility gate** — declarative `irreversible: true` on phases that touch money/deploys: hard stop instead of convention.
-- [ ] Mock mode for the MCP server (`AGENTFLOW_MOCK=1`) for testing without API keys
+- [x] Mock mode for the MCP server (`AGENTFLOW_MOCK=1`, `AGENTFLOW_MOCK_DELAY_MS` for slow-agent simulation)
 - [ ] Deduplicate `side_effects.files_written` across loop iterations in the receipt
 
 ## Then — Runtime features

@@ -72,6 +72,28 @@ Once configured, your workflows appear as tools:
 Claude calls agentflow's code_quality tool → writer → tester → critic → results
 ```
 
+## Long-running workflows (async execution)
+
+Multi-agent workflows can take minutes — longer than most MCP clients are willing to wait. The server handles this automatically:
+
+- **Fast workflows** (finished within `AGENTFLOW_SYNC_TIMEOUT_MS`, default 45s) return their full result directly, as before.
+- **Long workflows** return immediately with `{"state": "running", "instance_id": "..."}`. Poll with the built-in `agentflow_status` tool:
+
+```json
+{ "name": "agentflow_status", "arguments": { "instance_id": "94f623fb-..." } }
+```
+
+The status response includes live per-phase progress (`phase_states`), loop iterations, the execution receipt, and — once the workflow finishes — the full `phase_outputs`.
+
+Notes:
+
+- The instance registry is in-memory: if the server restarts, poll handles are lost (state files on disk can still be resumed via `agentflow resume`).
+- Set `AGENTFLOW_SYNC_TIMEOUT_MS=0` to force every call to return an async handle.
+
+## Testing without API keys
+
+Set `AGENTFLOW_MOCK=1` to run every workflow with mock executors — useful for validating workflow structure and MCP wiring before spending tokens. `AGENTFLOW_MOCK_DELAY_MS=<ms>` simulates slow agents to exercise the async path.
+
 ## Workflows Directory
 
 The MCP server watches `AGENTFLOW_WORKFLOWS_DIR` and exposes every `.aflow` file as a tool:
