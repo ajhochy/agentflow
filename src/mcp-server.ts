@@ -4,7 +4,8 @@ import { createInterface } from 'node:readline';
 import { parse } from './parser.js';
 import { compile } from './compiler.js';
 import { validate } from './validate.js';
-import { WorkflowRunner } from './runtime.js';
+import { WorkflowRunner, MockAgentExecutor } from './runtime.js';
+import type { WorkflowInstance } from './types.js';
 import { ClaudeExecutor } from './executors/claude-executor.js';
 import { OllamaExecutor } from './executors/ollama-executor.js';
 import { OpenRouterExecutor } from './executors/openrouter-executor.js';
@@ -82,6 +83,57 @@ function makeResult(id: number | string, result: unknown): JsonRpcResponse {
 function makeError(id: number | string | null, code: number, message: string): JsonRpcResponse {
   return { jsonrpc: '2.0', id, error: { code, message } };
 }
+
+// ─── Instance registry (async execution) ────────────────────────────
+
+type RunningInstance = {
+  instance: WorkflowInstance;
+  done: Promise<WorkflowInstance>;
+  error?: string;
+};
+
+const instances = new Map<string, RunningInstance>();
+
+/** How long tools/call waits before returning a pending instance_id. */
+const SYNC_WAIT_MS = Number(process.env.AGENTFLOW_SYNC_TIMEOUT_MS ?? 45000);
+
+function instanceSnapshot(entry: RunningInstance): Record<string, unknown> {
+  const i = entry.instance;
+  const terminal = i.state === 'completed' || i.state === 'failed';
+  return {
+    workflow_id: i.workflow_id,
+    instance_id: i.instance_id,
+    state: i.state,
+    phase_states: i.phase_states,
+    loop_iterations: i.loop_iterations,
+    // Outputs can be large — only included once the workflow is done
+    phase_outputs: terminal ? i.phase_outputs : undefined,
+    receipt: i.execution_receipt ?? null,
+    error: entry.error,
+    hint: terminal
+      ? undefined
+      : `Workflow still running. Poll again with agentflow_status({"instance_id": "${i.instance_id}"})`,
+  };
+}
+
+const STATUS_TOOL = {
+  name: 'agentflow_status',
+  description:
+    'Check the status of a running or finished AgentFlow workflow instance. ' +
+    'Returns state, per-phase progress, loop iterations, the execution receipt, ' +
+    'and phase outputs once the workflow has finished. ' +
+    'Use this to poll workflows that tools/call reported as still running.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      instance_id: {
+        type: 'string',
+        description: 'Instance ID returned by a workflow tool call',
+      },
+    },
+    required: ['instance_id'],
+  },
+};
 
 // ─── MCP Server ─────────────────────────────────────────────────────
 
@@ -192,6 +244,7 @@ async function main() {
               },
             });
           }
+          tools.push(STATUS_TOOL);
           sendResponse(makeResult(request.id, { tools }));
           break;
         }
@@ -205,6 +258,30 @@ async function main() {
             break;
           }
 
+          // Status polling tool
+          if (params.name === 'agentflow_status') {
+            const instanceId = params.arguments?.instance_id as string | undefined;
+            const entry = instanceId ? instances.get(instanceId) : undefined;
+            if (!entry) {
+              sendResponse(
+                makeError(
+                  request.id,
+                  -32602,
+                  `Unknown instance: ${instanceId ?? '(missing instance_id)'}. ` +
+                    `Note: the registry is in-memory — instances are lost if the server restarts ` +
+                    `(state files on disk can be resumed via the CLI: agentflow resume).`,
+                ),
+              );
+              break;
+            }
+            sendResponse(
+              makeResult(request.id, {
+                content: [{ type: 'text', text: JSON.stringify(instanceSnapshot(entry), null, 2) }],
+              }),
+            );
+            break;
+          }
+
           const ir = workflows.get(params.name);
           if (!ir) {
             sendResponse(makeError(request.id, -32602, `Unknown workflow: ${params.name}`));
@@ -214,7 +291,13 @@ async function main() {
           const outputDir = resolve(`./output/${ir.workflow.id}`);
           const toolRegistry = createBuiltinRegistry(outputDir);
 
+          const useMock = process.env.AGENTFLOW_MOCK === '1';
+          if (useMock) console.error('[agentflow] AGENTFLOW_MOCK=1 — using mock executors');
+          // Shared instance: the mock tracks loop iterations to flip verdict → approved
+          const mockExecutor = useMock ? new MockAgentExecutor() : null;
+
           const executor = (agent: AgentDef) => {
+            if (mockExecutor) return mockExecutor;
             const cfg = resolveModel(agent.model);
             console.error(`[agentflow] [${agent.id}] ${cfg.provider}/${cfg.model}`);
             switch (cfg.provider) {
@@ -232,27 +315,35 @@ async function main() {
           };
 
           const runner = new WorkflowRunner(ir, executor, { outputDir });
-          const instance = await runner.run(params.arguments ?? {});
+
+          // Start in background and register the live instance
+          const { instance, done } = runner.start(params.arguments ?? {});
+          const entry: RunningInstance = { instance, done };
+          instances.set(instance.instance_id, entry);
+          done.catch((err: Error) => {
+            entry.error = err.message;
+            console.error(`[agentflow] [${instance.instance_id}] failed: ${err.message}`);
+          });
+
+          // Wait briefly: fast workflows return their full result synchronously,
+          // long ones return a pending instance_id for agentflow_status polling.
+          const finished = await Promise.race([
+            done.then(
+              () => true,
+              () => true,
+            ),
+            new Promise<false>((res) => setTimeout(() => res(false), SYNC_WAIT_MS).unref?.()),
+          ]);
+
+          if (!finished) {
+            console.error(
+              `[agentflow] [${instance.instance_id}] still running after ${SYNC_WAIT_MS}ms — returning async handle`,
+            );
+          }
 
           sendResponse(
             makeResult(request.id, {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(
-                    {
-                      workflow_id: instance.workflow_id,
-                      instance_id: instance.instance_id,
-                      state: instance.state,
-                      phase_outputs: instance.phase_outputs,
-                      loop_iterations: instance.loop_iterations,
-                      receipt: instance.execution_receipt ?? null,
-                    },
-                    null,
-                    2,
-                  ),
-                },
-              ],
+              content: [{ type: 'text', text: JSON.stringify(instanceSnapshot(entry), null, 2) }],
             }),
           );
           break;
@@ -315,6 +406,11 @@ function buildDeclaration(ir: WorkflowIR): string {
 
   // Output dir (side effects)
   parts.push('May write output files to disk');
+
+  // Async contract
+  parts.push(
+    'Long runs return {state: "running", instance_id} — poll with the agentflow_status tool',
+  );
 
   return parts.join('. ');
 }

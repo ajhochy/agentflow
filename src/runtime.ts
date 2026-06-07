@@ -54,6 +54,10 @@ export class MockAgentExecutor implements AgentExecutor {
     agent: AgentDef,
     _input: Record<string, unknown>,
   ): Promise<{ output: Record<string, unknown>; metrics?: ExecutionMetrics }> {
+    // Simulate slow agents (useful to exercise async paths end-to-end)
+    const delay = Number(process.env.AGENTFLOW_MOCK_DELAY_MS ?? 0);
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+
     const output: Record<string, unknown> = {};
 
     if (agent.must_produce) {
@@ -122,8 +126,20 @@ export class WorkflowRunner {
   }
 
   async run(triggerInput: Record<string, unknown>): Promise<WorkflowInstance> {
+    return this.start(triggerInput).done;
+  }
+
+  /**
+   * Start a workflow without awaiting completion. Returns the live instance
+   * (mutated as execution progresses — safe to poll for status) and a promise
+   * that settles when the workflow finishes.
+   */
+  start(triggerInput: Record<string, unknown>): {
+    instance: WorkflowInstance;
+    done: Promise<WorkflowInstance>;
+  } {
     const instance = this.createInstance(triggerInput);
-    return this.execute(instance);
+    return { instance, done: this.execute(instance) };
   }
 
   async resume(instanceId: string): Promise<WorkflowInstance> {
