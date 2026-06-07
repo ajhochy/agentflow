@@ -166,4 +166,147 @@ describe('Validator', () => {
     const result = validate(ir);
     expect(result.warnings.some((w) => w.rule === 'S7')).toBe(true);
   });
+
+  // ─── S11: dangling references ───────────────────────────────────
+
+  test('S11: input che referenzia fase inesistente → error', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [makePhase('write', { agent: 'writer', input: ['ghost_phase.field'], output: ['draft'] })],
+    });
+    const result = validate(ir);
+    expect(result.errors.some((e) => e.rule === 'S11')).toBe(true);
+  });
+
+  test('S11: input trigger.* e fase precedente → ok', () => {
+    const ir = makeIR({
+      agents: {
+        researcher: makeAgent('researcher', { must_produce: [{ name: 'outline' }] }),
+        writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }),
+      },
+      phases: [
+        makePhase('research', { agent: 'researcher', input: ['trigger.topic'], output: ['outline'] }),
+        makePhase('write', { agent: 'writer', input: ['research.outline'], output: ['draft'] }),
+      ],
+    });
+    const result = validate(ir);
+    expect(result.errors.some((e) => e.rule === 'S11')).toBe(false);
+  });
+
+  test('S11: done_when che referenzia fase inesistente → error', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [makePhase('write', { agent: 'writer', output: ['draft'] })],
+      done_when: {
+        kind: 'compare',
+        left: { kind: 'ref', path: 'ghost_phase.confidence' },
+        op: '>=',
+        right: { kind: 'literal', value: 0.8 },
+      },
+    });
+    const result = validate(ir);
+    expect(result.errors.some((e) => e.rule === 'S11')).toBe(true);
+  });
+
+  test('S11: done_when annidato (and/or) con ref valido → ok', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [makePhase('write', { agent: 'writer', output: ['draft'] })],
+      done_when: {
+        kind: 'and',
+        conditions: [
+          {
+            kind: 'compare',
+            left: { kind: 'ref', path: 'write.confidence' },
+            op: '>=',
+            right: { kind: 'literal', value: 0.8 },
+          },
+        ],
+      },
+    });
+    const result = validate(ir);
+    expect(result.errors.some((e) => e.rule === 'S11')).toBe(false);
+  });
+
+  test('S11: loop repeat_while e send_to con riferimenti rotti → errors', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [makePhase('write', { agent: 'writer', output: ['draft'] })],
+      loop: {
+        id: 'cycle',
+        phases: ['write'],
+        max_iterations: 3,
+        repeat_while: {
+          kind: 'compare',
+          left: { kind: 'ref', path: 'ghost.verdict' },
+          op: '==',
+          right: { kind: 'literal', value: 'needs_work' },
+        },
+        on_each_iteration: { send_to: 'ghost_agent', payload: 'ghost.suggestions' },
+      } as LoopDef,
+    });
+    const result = validate(ir);
+    const s11 = result.errors.filter((e) => e.rule === 'S11');
+    expect(s11.length).toBe(3); // repeat_while + payload + send_to
+  });
+
+  test('S11: payload letterale (frase) → nessun errore', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [makePhase('write', { agent: 'writer', output: ['draft'] })],
+      loop: {
+        id: 'cycle',
+        phases: ['write'],
+        max_iterations: 3,
+        on_each_iteration: { send_to: 'writer', payload: 'Too short. Expand to 50 words.' },
+      } as LoopDef,
+    });
+    const result = validate(ir);
+    expect(result.errors.some((e) => e.rule === 'S11')).toBe(false);
+  });
+
+  test('S11: escalate_to non definito → warning, non errore (escalation log-only)', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [makePhase('write', { agent: 'writer', output: ['draft'] })],
+      loop: {
+        id: 'cycle',
+        phases: ['write'],
+        max_iterations: 3,
+        on_max_exceeded: { escalate_to: 'human_reviewer', message: 'help' },
+      } as LoopDef,
+    });
+    const result = validate(ir);
+    expect(result.errors.some((e) => e.rule === 'S11')).toBe(false);
+    expect(result.warnings.some((w) => w.rule === 'S11')).toBe(true);
+  });
+
+  // ─── S12: parsed-but-ignored features ───────────────────────────
+
+  test('S12: fase human_action_required con timeout → warning (non eseguita a runtime)', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [
+        makePhase('approve', {
+          agent: 'writer',
+          type: 'human_action_required',
+          timeout: { value: 30, unit: 'min' } as PhaseDef['timeout'],
+          output: ['draft'],
+        }),
+      ],
+    });
+    const result = validate(ir);
+    const s12 = result.warnings.filter((w) => w.rule === 'S12');
+    expect(s12.length).toBe(1);
+    expect(s12[0].message).toContain('NOT executed');
+  });
+
+  test('S12: fase standard senza feature ignorate → nessun warning', () => {
+    const ir = makeIR({
+      agents: { writer: makeAgent('writer', { must_produce: [{ name: 'draft' }] }) },
+      phases: [makePhase('write', { agent: 'writer', output: ['draft'] })],
+    });
+    const result = validate(ir);
+    expect(result.warnings.some((w) => w.rule === 'S12')).toBe(false);
+  });
 });
