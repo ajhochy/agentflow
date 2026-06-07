@@ -1,47 +1,65 @@
 # AgentFlow Roadmap
 
-## v0.1.0 (Current)
-- [x] Indentation-based tokenizer
-- [x] Recursive descent parser
-- [x] AST → WorkflowIR compiler
+Updated June 2026 to reflect the actual state of the project (v1.0.18 on npm).
+
+## Shipped
+
+### Language & tooling (v1.0.x)
+- [x] Indentation-based tokenizer, recursive descent parser, AST → WorkflowIR compiler
 - [x] Semantic validation (S1–S10)
-- [x] MockRuntime execution
-- [x] CLI (compile, validate, check, build, run)
-- [x] MCP server (stdio JSON-RPC)
+- [x] CLI (`init`, `compile`, `validate`, `check`, `build`, `run`, `mcp-config`, `models`, `resume`)
+- [x] MockRuntime (`--mock`, no API keys needed)
 - [x] Example workflows
 
-## v0.2.0 — Real Agent Execution
-- [ ] LLM-backed AgentExecutor (Anthropic Claude API)
-- [ ] Tool execution bridge (MCP tool calls from agents)
-- [ ] Streaming output support
-- [ ] Context injection from files
+### Real agent execution
+- [x] LLM-backed executors: Claude (Anthropic SDK), OpenRouter, Ollama, Hermes
+- [x] **Agent SDK executor** — run workflows on the Claude plan's monthly Agent SDK credit (subscription auth, no API key)
+- [x] Per-agent model aliases (multi-model orchestration)
+- [x] Tool execution bridge (built-in tools: file_write, file_read, shell_exec, test_runner)
+- [x] Context injection from files (`inject_context`)
+- [x] Retry with exponential backoff
+- [x] State persistence and `resume`
 
-## v0.3.0 — Advanced Runtime
+### Validation & transparency
+- [x] `output_schema` (JSON Schema) with retry-on-validation-failure and `on_fail: abort | default`
+- [x] **ExecutionReceipt**: per-phase execution log, tool calls, side effects, checkpoints, resumability
+- [x] **Tool declaration**: MCP `tools/list` describes agents, models, phases, loops, and side effects upfront
+
+## Next — Production hardening (highest priority)
+
+- [ ] **Async MCP execution** — long workflows exceed MCP client timeouts today. Return an `instance_id` immediately, add a `get_status` tool for polling (or MCP progress notifications). Kill orphaned runs on client disconnect.
+- [ ] **Honest runtime** — `rollback_on_fail`, `human_action_required`, and `streaming_batch` are parsed but silently ignored at runtime. Either implement them or reject them at validation until they work.
+- [ ] **S11 validation** — fail validation on references to undefined phases in `input:` and `done when` (today they pass and fail silently at runtime).
+- [ ] **Irreversibility gate** — declarative `irreversible: true` on phases that touch money/deploys: hard stop instead of convention.
+- [ ] Mock mode for the MCP server (`AGENTFLOW_MOCK=1`) for testing without API keys
+- [ ] Deduplicate `side_effects.files_written` across loop iterations in the receipt
+
+## Then — Runtime features
+
 - [ ] Parallel phase execution
-- [ ] Real polling with backoff strategies
-- [ ] Retry with exponential backoff
-- [ ] Rollback execution
-- [ ] Human-in-the-loop with notifications
-- [ ] State persistence and recovery
+- [ ] Human-in-the-loop with notifications and timeouts (real implementation)
+- [ ] Rollback execution (real implementation)
+- [ ] Streaming output support
+- [ ] Budget constraints (the agent-sdk executor already reports cost per run; enforce per-workflow caps)
 
-## v0.4.0 — Developer Experience
+## Later — Developer experience
+
 - [ ] VS Code extension with syntax highlighting
 - [ ] Language server (LSP) for autocomplete and diagnostics
-- [ ] `agentflow init` scaffolding command
 - [ ] Watch mode for development
-- [ ] Debug/trace mode with detailed execution logs
+- [ ] Trace mode building on ExecutionReceipt (live, not just post-run)
 
-## v0.5.0 — Ecosystem
+## Ecosystem (exploratory)
+
 - [ ] Workflow registry and sharing
 - [ ] Pre-built agent templates
 - [ ] Plugin system for custom tools
 - [ ] Web-based workflow visualizer
 - [ ] CI/CD integration (GitHub Actions)
 
-## Future Considerations
+## Future considerations
+
 - Conditional branching (`if/else` phases)
 - Sub-workflows and workflow composition
 - Event-driven triggers (webhooks, cron)
-- Multi-model orchestration (different LLMs per agent)
-- Cost estimation and budget constraints
 - Observability (OpenTelemetry integration)
