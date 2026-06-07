@@ -2,6 +2,13 @@
 
 All notable changes to AgentFlow DSL will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **AgentSdkExecutor** (`provider: "agent-sdk"`): run agents through the Claude Agent SDK with subscription authentication. Usage draws from the plan's monthly Agent SDK credit (Pro $20, Max 5x $100, Max 20x $200 — from June 15, 2026) instead of pay-as-you-go API credits. Requires Claude Code logged in (`claude login`) and the optional dependency `@anthropic-ai/claude-agent-sdk`
+- New built-in model alias `claude-plan` → `agent-sdk` / `claude-sonnet-4-5`
+- Safety: the executor unsets `ANTHROPIC_API_KEY` for the process (the SDK would give it precedence, silently billing the API account instead of the subscription credit)
+
 ## [1.0.18] — 2026-06-06
 
 ### Added
