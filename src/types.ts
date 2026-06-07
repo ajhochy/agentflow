@@ -90,6 +90,8 @@ export type PhaseDef = {
   output?: string[];
   type: string; // standard, human_action_required, streaming_batch
   timeout?: Duration;
+  /** Phase performs an irreversible action (money, deploy, delete) — runtime requires explicit approval */
+  irreversible?: boolean;
   poll?: PollConfig;
   retry?: RetryConfig;
   rollback_on_fail?: RollbackOnFail;
@@ -290,7 +292,7 @@ export type ExecutionStep = {
   phase_id: string;
   iteration?: number;
   timestamp: string;
-  state: 'started' | 'completed' | 'failed' | 'retry';
+  state: 'started' | 'completed' | 'failed' | 'retry' | 'gated';
   error?: string;
 };
 

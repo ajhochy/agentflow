@@ -90,6 +90,20 @@ Notes:
 - The instance registry is in-memory: if the server restarts, poll handles are lost (state files on disk can still be resumed via `agentflow resume`).
 - Set `AGENTFLOW_SYNC_TIMEOUT_MS=0` to force every call to return an async handle.
 
+## Irreversible phases (approval gate)
+
+Workflows with phases marked `irreversible: true` declare them in the tool description and expose an optional `approve_irreversible` boolean argument. Without it, the workflow pauses at the gate and the response includes a hint:
+
+```json
+{ "state": "paused", "instance_id": "...", "hint": "Workflow paused at irreversible phase \"deploy\"..." }
+```
+
+Review the state (via `agentflow_status`), then resume with the `agentflow_resume` tool:
+
+```json
+{ "name": "agentflow_resume", "arguments": { "instance_id": "...", "approve_irreversible": true } }
+```
+
 ## Testing without API keys
 
 Set `AGENTFLOW_MOCK=1` to run every workflow with mock executors — useful for validating workflow structure and MCP wiring before spending tokens. `AGENTFLOW_MOCK_DELAY_MS=<ms>` simulates slow agents to exercise the async path.

@@ -280,6 +280,7 @@ function compilePhase(ast: ASTPhase): PhaseDef {
     output: getStringList(props, 'output'),
     type: getString(props, 'type') ?? 'standard',
     timeout: getDuration(props, 'timeout'),
+    irreversible: getBool(props, 'irreversible'),
   };
 
   // Poll config

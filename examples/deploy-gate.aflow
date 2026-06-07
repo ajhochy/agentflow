@@ -1,0 +1,41 @@
+workflow deploy_gate
+  description: "Build, review, and deploy with an irreversibility gate on the deploy phase"
+  version: "1.0.0"
+
+  agents:
+    agent builder
+      mode: focused
+      must_produce:
+        - artifact
+        - build_log
+
+    agent reviewer
+      mode: adversarial
+      must_produce:
+        - verdict
+        - confidence: float
+
+    agent deployer
+      mode: reliable
+      must_produce:
+        - deploy_url
+        - rollback_hint
+
+  phases:
+    phase build
+      agent: builder
+      input: [trigger.task]
+      output: [artifact, build_log]
+
+    phase review
+      agent: reviewer
+      input: [build.artifact]
+      output: [verdict, confidence]
+
+    phase deploy
+      agent: deployer
+      irreversible: true
+      input: [build.artifact, review.verdict]
+      output: [deploy_url, rollback_hint]
+
+  done when: review.confidence >= 0.5
