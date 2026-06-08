@@ -1,6 +1,6 @@
 # AgentFlow Roadmap
 
-Updated June 2026 to reflect the actual state of the project (v1.0.18 on npm).
+Updated June 2026 to reflect the actual state of the project (v1.0.19 on npm).
 
 ## Shipped
 
@@ -32,7 +32,7 @@ Updated June 2026 to reflect the actual state of the project (v1.0.18 on npm).
 - [x] **S11 validation** — dangling references in `input:`, `done when`, `repeat_while`, and loop payloads/targets now fail validation.
 - [x] **Irreversibility gate** — `irreversible: true` phases pause the workflow until explicitly approved (`--approve-irreversible` / `approve_irreversible: true` / `agentflow_resume`). S13 warns on irreversible phases inside loops.
 - [x] Mock mode for the MCP server (`AGENTFLOW_MOCK=1`, `AGENTFLOW_MOCK_DELAY_MS` for slow-agent simulation)
-- [ ] Deduplicate `side_effects.files_written` across loop iterations in the receipt
+- [x] Deduplicate `side_effects.files_written` across loop iterations in the receipt
 
 ## Then — Runtime features
 

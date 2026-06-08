@@ -698,13 +698,13 @@ export class WorkflowRunner {
       // Write full phase output as JSON
       const outPath = join(this.outputDir, `${phaseId}.json`);
       writeFileSync(outPath, JSON.stringify(output, null, 2));
-      this.getOrCreateReceipt(instance).side_effects.files_written.push(outPath);
+      this.recordFileWritten(instance, outPath);
 
       // Extract code fields as standalone files
       if (typeof output['code'] === 'string') {
         const codePath = join(this.outputDir, `${phaseId}.code.ts`);
         writeFileSync(codePath, output['code']);
-        this.getOrCreateReceipt(instance).side_effects.files_written.push(codePath);
+        this.recordFileWritten(instance, codePath);
       }
     } catch {
       // Non-critical — don't break workflow for output persistence
@@ -729,7 +729,7 @@ export class WorkflowRunner {
       };
       const manifestPath = join(this.outputDir, 'manifest.json');
       writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-      this.getOrCreateReceipt(instance).side_effects.files_written.push(manifestPath);
+      this.recordFileWritten(instance, manifestPath);
     } catch {
       // Non-critical
     }
@@ -856,6 +856,12 @@ export class WorkflowRunner {
 
   private pushExecutionStep(instance: WorkflowInstance, step: ExecutionStep): void {
     this.getOrCreateReceipt(instance).execution_log.push(step);
+  }
+
+  /** Record a written file, deduplicating paths rewritten across loop iterations. */
+  private recordFileWritten(instance: WorkflowInstance, path: string): void {
+    const written = this.getOrCreateReceipt(instance).side_effects.files_written;
+    if (!written.includes(path)) written.push(path);
   }
 
   private trackFailedStep(
