@@ -164,6 +164,14 @@ export class ClaudeExecutor implements AgentExecutor {
       lines.push('Use them as needed to complete the task.');
     }
 
+    // Rollback directive: reverse the phase instead of repeating it
+    if (context?.rollback) {
+      lines.push(
+        `\nROLLBACK MODE: You are UNDOING the effects of phase "${context.rollback.undoing}". ` +
+          `Do NOT perform the original action again — reverse it (delete, deprovision, revert) and report what you undid.`,
+      );
+    }
+
     // Inject rules/context file content
     if (context?.injectedContext) {
       lines.push(`\n--- Project context ---\n${context.injectedContext}\n--- End context ---`);

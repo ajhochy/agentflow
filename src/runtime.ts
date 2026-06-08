@@ -26,6 +26,8 @@ export type ExecutionContext = {
     acceptance_criteria?: string;
   };
   injectedContext?: string;
+  /** Set when the agent is being invoked to undo a previously-completed phase */
+  rollback?: { undoing: string };
 };
 
 // ─── Agent Executor Interface ───────────────────────────────────────
@@ -107,16 +109,25 @@ export class WorkflowRunner {
   private approveIrreversible: boolean;
   /** Set when execution stops at an unapproved irreversible phase */
   private gatedPhase: string | null = null;
+  /** Set when execution stops waiting for a human_action_required phase */
+  private awaitingUserPhase: string | null = null;
+  /** Human-supplied outputs for human_action_required phases, keyed by phase id */
+  private userInputs: Record<string, Record<string, unknown>>;
 
   constructor(
     ir: WorkflowIR,
     executor: AgentExecutor | ExecutorResolver,
-    options?: { outputDir?: string; approveIrreversible?: boolean },
+    options?: {
+      outputDir?: string;
+      approveIrreversible?: boolean;
+      userInputs?: Record<string, Record<string, unknown>>;
+    },
   ) {
     this.ir = ir;
     this.resolveExecutor = typeof executor === 'function' ? executor : () => executor;
     this.outputDir = options?.outputDir;
     this.approveIrreversible = options?.approveIrreversible ?? false;
+    this.userInputs = options?.userInputs ?? {};
   }
 
   /** Register signal handlers for graceful shutdown. Call once before run(). */
@@ -197,9 +208,11 @@ export class WorkflowRunner {
       const loop = this.ir.workflow.loop;
       const loopPhaseIds = new Set(loop?.phases ?? []);
 
+      const stopped = () => this.aborted || this.gatedPhase || this.awaitingUserPhase;
+
       // Execute non-loop phases that come before loop phases
       for (const phase of this.ir.workflow.phases) {
-        if (this.aborted || this.gatedPhase) break;
+        if (stopped()) break;
         if (loopPhaseIds.has(phase.id)) continue;
         if (instance.phase_states[phase.id] === 'completed') continue;
 
@@ -214,16 +227,28 @@ export class WorkflowRunner {
       }
 
       // Execute loop if present
-      if (loop && !this.aborted && !this.gatedPhase) {
+      if (loop && !stopped()) {
         await this.executeLoop(loop, instance);
       }
 
       // Execute non-loop phases that come after loop phases
       for (const phase of this.ir.workflow.phases) {
-        if (this.aborted || this.gatedPhase) break;
+        if (stopped()) break;
         if (loopPhaseIds.has(phase.id)) continue;
         if (instance.phase_states[phase.id] === 'completed') continue;
         await this.executePhase(phase, instance);
+      }
+
+      if (this.awaitingUserPhase) {
+        instance.state = 'paused';
+        const phase = this.ir.workflow.phases.find((p) => p.id === this.awaitingUserPhase);
+        const instr = phase?.instruction_to_user?.message ?? 'Human action required';
+        logger.warn(
+          `[human] Phase "${this.awaitingUserPhase}" requires human action: ${instr}. ` +
+            `Workflow paused (instance ${instance.instance_id}). ` +
+            `Resume providing the phase outputs to continue.`,
+        );
+        return instance;
       }
 
       if (this.gatedPhase) {
@@ -291,6 +316,35 @@ export class WorkflowRunner {
     instance: WorkflowInstance,
     context?: ExecutionContext,
   ): Promise<void> {
+    // Human-in-the-loop: a human_action_required phase is satisfied by human-provided
+    // outputs (passed on resume), otherwise it pauses the workflow for human action.
+    if (phase.type === 'human_action_required') {
+      const provided = this.userInputs[phase.id];
+      if (provided) {
+        instance.phase_outputs[phase.id] = { ...provided };
+        instance.phase_states[phase.id] = 'completed';
+        this.pushExecutionStep(instance, {
+          phase_id: phase.id,
+          iteration: context?.loop?.iteration,
+          timestamp: new Date().toISOString(),
+          state: 'completed',
+        });
+        this.saveState(instance);
+        this.writePhaseOutput(phase.id, instance.phase_outputs[phase.id], instance);
+        return;
+      }
+      this.awaitingUserPhase = phase.id;
+      instance.phase_states[phase.id] = 'awaiting_user';
+      this.pushExecutionStep(instance, {
+        phase_id: phase.id,
+        iteration: context?.loop?.iteration,
+        timestamp: new Date().toISOString(),
+        state: 'awaiting_user',
+        error: phase.instruction_to_user?.message,
+      });
+      return;
+    }
+
     // Irreversibility gate: never execute an irreversible phase without explicit approval
     if (phase.irreversible && !this.approveIrreversible) {
       this.gatedPhase = phase.id;
@@ -409,7 +463,66 @@ export class WorkflowRunner {
         state: 'failed',
         error: errMsg,
       });
+
+      // rollback_on_fail: undo previously-completed phases (in declared order)
+      if (phase.rollback_on_fail?.undo?.length) {
+        await this.runRollback(phase, instance);
+      }
+
       throw err;
+    }
+  }
+
+  /**
+   * Execute the rollback sequence declared by a failed phase.
+   * Each undo target's agent is re-invoked with a rollback directive so it can
+   * reverse the phase's side effects (e.g. an agent with shell_exec can deprovision).
+   */
+  private async runRollback(failedPhase: PhaseDef, instance: WorkflowInstance): Promise<void> {
+    const undo = failedPhase.rollback_on_fail?.undo ?? [];
+    logger.warn(
+      `[rollback] Phase "${failedPhase.id}" failed — undoing: ${undo.join(', ')} (in order)`,
+    );
+
+    for (const targetId of undo) {
+      const target = this.ir.workflow.phases.find((p) => p.id === targetId);
+      if (!target) {
+        logger.warn(`[rollback] undo target "${targetId}" is not a defined phase — skipping`);
+        continue;
+      }
+      // Only undo phases that actually ran
+      if (instance.phase_states[targetId] !== 'completed') {
+        logger.info(`[rollback] skipping "${targetId}" — was not completed`);
+        continue;
+      }
+
+      const agent = this.ir.workflow.agents[target.agent];
+      if (!agent) {
+        logger.warn(`[rollback] agent "${target.agent}" for "${targetId}" not found — skipping`);
+        continue;
+      }
+
+      try {
+        const executor = this.resolveExecutor(agent);
+        const rollbackContext: ExecutionContext = { rollback: { undoing: targetId } };
+        const input = this.resolveInputs(target.input ?? [], instance, targetId);
+        await executor.execute(agent, input, rollbackContext);
+        instance.phase_states[targetId] = 'rolled_back';
+        this.pushExecutionStep(instance, {
+          phase_id: targetId,
+          timestamp: new Date().toISOString(),
+          state: 'rolled_back',
+        });
+        logger.info(`[rollback] "${targetId}" rolled back`);
+      } catch (rbErr) {
+        logger.error(`[rollback] failed to undo "${targetId}": ${(rbErr as Error).message}`);
+        this.pushExecutionStep(instance, {
+          phase_id: targetId,
+          timestamp: new Date().toISOString(),
+          state: 'failed',
+          error: `rollback failed: ${(rbErr as Error).message}`,
+        });
+      }
     }
   }
 
@@ -493,7 +606,7 @@ export class WorkflowRunner {
       .filter((p): p is PhaseDef => p !== undefined);
 
     do {
-      if (this.aborted || this.gatedPhase) break;
+      if (this.aborted || this.gatedPhase || this.awaitingUserPhase) break;
       iteration++;
       instance.loop_iterations[loop.id] = iteration;
 
@@ -543,7 +656,7 @@ export class WorkflowRunner {
           },
         };
         await this.executePhase(phase, instance, loopContext);
-        if (this.gatedPhase) return;
+        if (this.gatedPhase || this.awaitingUserPhase) return;
       }
 
       // Early exit: if done_when is already satisfied, break immediately

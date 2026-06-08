@@ -269,7 +269,14 @@ export type Token = {
 
 // ─── Runtime Types ───────────────────────────────────────────────────
 
-export type PhaseState = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+export type PhaseState =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'awaiting_user'
+  | 'rolled_back';
 export type WorkflowState = 'pending' | 'running' | 'completed' | 'failed' | 'paused';
 
 export type WorkflowInstance = {
@@ -292,7 +299,7 @@ export type ExecutionStep = {
   phase_id: string;
   iteration?: number;
   timestamp: string;
-  state: 'started' | 'completed' | 'failed' | 'retry' | 'gated';
+  state: 'started' | 'completed' | 'failed' | 'retry' | 'gated' | 'awaiting_user' | 'rolled_back';
   error?: string;
 };
 

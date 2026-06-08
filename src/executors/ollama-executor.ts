@@ -180,6 +180,12 @@ export class OllamaExecutor implements AgentExecutor {
       lines.push(`Constraints:\n${agent.constraints.map((c) => `- ${c}`).join('\n')}`);
     if (agent.rules?.length) lines.push(`Rules:\n${agent.rules.map((r) => `- ${r}`).join('\n')}`);
 
+    if (context?.rollback) {
+      lines.push(
+        `ROLLBACK MODE: You are UNDOING the effects of phase "${context.rollback.undoing}". Do NOT repeat the original action — reverse it (delete, deprovision, revert) and report what you undid.`,
+      );
+    }
+
     if (context?.injectedContext) {
       lines.push(`Project context:\n${context.injectedContext}`);
     }

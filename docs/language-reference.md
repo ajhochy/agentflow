@@ -118,6 +118,37 @@ A phase marked `irreversible: true` never executes without explicit approval. Wi
 
 Validation S13 warns if an irreversible phase sits inside a loop — a single approval covers every iteration.
 
+### human_action_required
+
+A phase with `type: human_action_required` does not run an agent — it **pauses the workflow** for human input:
+
+```aflow
+phase approve
+  agent: planner
+  type: human_action_required
+  instruction_to_user:
+    message: "Approve the plan before deployment"
+  input: [plan.plan]
+  output: [approved]
+```
+
+The workflow pauses (`state: paused`, phase `awaiting_user`) and records the `instruction_to_user` message in the receipt. Resume by supplying the phase's outputs — via the runner's `userInputs` option — and execution continues with those values.
+
+### rollback_on_fail
+
+If a phase fails, `rollback_on_fail.undo` lists previously-completed phases to reverse:
+
+```aflow
+phase update_database
+  agent: db_updater
+  input: [provision.resource_id]
+  output: [status]
+  rollback_on_fail:
+    undo: [configure_proxy, provision]
+```
+
+On failure, each completed undo target's agent is re-invoked in **rollback mode** (a directive tells the agent to reverse, not repeat, its action — useful for agents with `shell_exec` that can deprovision). Undone phases are marked `rolled_back` in the receipt; the workflow still fails.
+
 ### Input References
 
 - `trigger.<key>` — workflow input passed via `--input`
