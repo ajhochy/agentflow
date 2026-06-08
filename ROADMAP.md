@@ -40,7 +40,7 @@ Updated June 2026 to reflect the actual state of the project (v1.0.19 on npm).
 - [x] Human-in-the-loop (real) — `human_action_required` phases pause for human-provided outputs (`userInputs` on resume). Still open: timeout enforcement + notifications.
 - [x] Rollback execution (real) — `rollback_on_fail.undo` re-invokes completed phases' agents in rollback mode on failure, marks them `rolled_back`.
 - [ ] Streaming output support
-- [ ] Budget constraints (the agent-sdk executor already reports cost per run; enforce per-workflow caps)
+- [x] Budget constraints — workflow-level `max_cost` aborts when accumulated agent cost exceeds the cap (`receipt.total_cost_usd`, `metrics.cost_usd`).
 
 ## Later — Developer experience
 

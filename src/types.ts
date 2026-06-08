@@ -151,6 +151,8 @@ export type WorkflowIR = {
     done_when?: Condition;
     rollback?: RollbackConfig;
     on_success?: OnSuccessConfig;
+    /** Maximum total cost (USD) before the workflow aborts. Requires executors that report cost. */
+    max_cost?: number;
   };
 };
 
@@ -311,9 +313,13 @@ export type ExecutionReceipt = {
   failed_steps: { phase_id: string; error: string; iteration?: number }[];
   resumable: boolean;
   resume_from_phase?: string;
+  /** Accumulated cost (USD) across all agent invocations, when reported by executors */
+  total_cost_usd?: number;
 };
 
 export type ExecutionMetrics = {
   tool_calls: number;
   tool_names?: string[];
+  /** Cost of this agent invocation in USD, if the executor reports it */
+  cost_usd?: number;
 };

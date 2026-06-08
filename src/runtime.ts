@@ -111,6 +111,8 @@ export class WorkflowRunner {
   private gatedPhase: string | null = null;
   /** Set when execution stops waiting for a human_action_required phase */
   private awaitingUserPhase: string | null = null;
+  /** Set when the accumulated cost exceeds the workflow's max_cost */
+  private budgetExceeded: string | null = null;
   /** Human-supplied outputs for human_action_required phases, keyed by phase id */
   private userInputs: Record<string, Record<string, unknown>>;
 
@@ -208,7 +210,8 @@ export class WorkflowRunner {
       const loop = this.ir.workflow.loop;
       const loopPhaseIds = new Set(loop?.phases ?? []);
 
-      const stopped = () => this.aborted || this.gatedPhase || this.awaitingUserPhase;
+      const stopped = () =>
+        this.aborted || this.gatedPhase || this.awaitingUserPhase || this.budgetExceeded;
 
       // Execute non-loop phases that come before loop phases
       for (const phase of this.ir.workflow.phases) {
@@ -237,6 +240,13 @@ export class WorkflowRunner {
         if (loopPhaseIds.has(phase.id)) continue;
         if (instance.phase_states[phase.id] === 'completed') continue;
         await this.executePhase(phase, instance);
+      }
+
+      if (this.budgetExceeded) {
+        instance.state = 'failed';
+        this.trackFailedStep(instance, 'budget', `Budget exceeded — ${this.budgetExceeded}`);
+        logger.error(`[budget] Workflow aborted — ${this.budgetExceeded}`);
+        return instance;
       }
 
       if (this.awaitingUserPhase) {
@@ -389,10 +399,21 @@ export class WorkflowRunner {
 
       // Track tool calls
       if (metrics) {
-        this.getOrCreateReceipt(instance).tool_calls[phase.id] = {
+        const receipt = this.getOrCreateReceipt(instance);
+        receipt.tool_calls[phase.id] = {
           count: metrics.tool_calls,
           names: metrics.tool_names,
         };
+        // Accumulate cost; enforce the workflow budget after the phase completes
+        if (metrics.cost_usd !== undefined) {
+          receipt.total_cost_usd = (receipt.total_cost_usd ?? 0) + metrics.cost_usd;
+          const budget = this.ir.workflow.max_cost;
+          if (budget !== undefined && receipt.total_cost_usd > budget) {
+            this.budgetExceeded =
+              `cost $${receipt.total_cost_usd.toFixed(4)} exceeds max_cost ` +
+              `$${budget.toFixed(4)} after phase "${phase.id}"`;
+          }
+        }
       }
 
       // Verify must_produce — fill missing fields with defaults instead of crashing
@@ -606,7 +627,7 @@ export class WorkflowRunner {
       .filter((p): p is PhaseDef => p !== undefined);
 
     do {
-      if (this.aborted || this.gatedPhase || this.awaitingUserPhase) break;
+      if (this.aborted || this.gatedPhase || this.awaitingUserPhase || this.budgetExceeded) break;
       iteration++;
       instance.loop_iterations[loop.id] = iteration;
 
@@ -656,7 +677,7 @@ export class WorkflowRunner {
           },
         };
         await this.executePhase(phase, instance, loopContext);
-        if (this.gatedPhase || this.awaitingUserPhase) return;
+        if (this.gatedPhase || this.awaitingUserPhase || this.budgetExceeded) return;
       }
 
       // Early exit: if done_when is already satisfied, break immediately

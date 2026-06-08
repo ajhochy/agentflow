@@ -52,11 +52,13 @@ workflow <id>
 workflow <id>
   description: "<text>"
   version: "<semver>"
+  max_cost: <usd>          # optional — abort if accumulated agent cost exceeds this
 ```
 
 - `id` — unique identifier, snake_case
 - `description` — human-readable (shown in CLI and MCP tool description)
 - `version` — semantic versioning
+- `max_cost` — optional spend cap in USD. The workflow aborts (`state: failed`) once total agent cost exceeds it. Requires executors that report cost (e.g. `agent-sdk`); cost is accumulated in the execution receipt's `total_cost_usd`.
 
 ## Agents
 
