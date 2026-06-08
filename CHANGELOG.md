@@ -2,6 +2,11 @@
 
 All notable changes to AgentFlow DSL will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- `side_effects.files_written` in the execution receipt no longer lists the same path multiple times when a file is rewritten across loop iterations
+
 ## [1.0.19] — 2026-06-07
 
 ### Added
