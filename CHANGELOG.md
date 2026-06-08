@@ -5,6 +5,7 @@ All notable changes to AgentFlow DSL will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Budget constraints**: a workflow-level `max_cost: <usd>` aborts the workflow (`state: failed`, a `budget` entry in `failed_steps`) once accumulated agent cost exceeds the cap. Cost is tracked in `receipt.total_cost_usd` and reported per-agent via `metrics.cost_usd` (the agent-sdk executor reports real `total_cost_usd`; other executors leave it unset)
 - **Human-in-the-loop (real)**: `type: human_action_required` phases now pause the workflow (`state: paused`, phase `awaiting_user`, `instruction_to_user` recorded in the receipt) instead of being silently ignored. Resume with human-provided outputs via `userInputs` (runner) — subsequent phases run with those values
 - **Rollback (real)**: when a phase with `rollback_on_fail.undo: [...]` fails, the runtime re-invokes each completed undo target's agent in **rollback mode** (a directive instructs the agent to reverse, not repeat, the action), marks those phases `rolled_back`, and records the steps in the receipt. All four executors honor the rollback directive
 

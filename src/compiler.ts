@@ -526,6 +526,7 @@ export function compile(ast: ASTWorkflow): WorkflowIR {
       done_when: doneWhen,
       rollback: compileRollback(ast.properties),
       on_success: compileOnSuccess(ast.properties),
+      max_cost: getNumber(ast.properties, 'max_cost'),
     },
   };
 }
