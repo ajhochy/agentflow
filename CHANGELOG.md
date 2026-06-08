@@ -2,28 +2,24 @@
 
 All notable changes to AgentFlow DSL will be documented in this file.
 
-## [Unreleased]
+## [1.0.19] — 2026-06-07
 
 ### Added
+- **AgentSdkExecutor** (`provider: "agent-sdk"`): run agents through the Claude Agent SDK with subscription authentication. Usage draws from the plan's monthly Agent SDK credit (Pro $20, Max 5x $100, Max 20x $200 — from June 15, 2026) instead of pay-as-you-go API credits. Requires Claude Code logged in (`claude login`) and the optional dependency `@anthropic-ai/claude-agent-sdk`. New `claude-plan` model alias. The executor unsets `ANTHROPIC_API_KEY` for the process so the SDK uses subscription auth instead of silently billing the API account
 - **Async MCP execution**: `tools/call` no longer blocks until the workflow finishes. Fast workflows (< `AGENTFLOW_SYNC_TIMEOUT_MS`, default 45s) still return their full result synchronously; longer ones return `{state: "running", instance_id}` immediately — no more MCP client timeouts
-- **`agentflow_status` tool**: poll a running instance for live per-phase progress, loop iterations, execution receipt, and (once finished) phase outputs
-- `WorkflowRunner.start()`: non-blocking API returning the live instance plus a completion promise (`run()` unchanged)
-- **Mock mode for the MCP server**: `AGENTFLOW_MOCK=1` runs workflows with mock executors (no API keys needed); `AGENTFLOW_MOCK_DELAY_MS` simulates slow agents
-- **S11 validation (dangling references)**: references to undefined phases in `input:`, `done when`, `repeat_while`, and ref-shaped loop payloads now fail validation instead of failing silently at runtime; undefined `send_to` agents are errors, undefined `escalate_to` targets are warnings (escalation is log-only today)
-- **S12 validation (honest runtime)**: workflows using parsed-but-not-executed features (`human_action_required`, `streaming_batch`, `poll`, `retry`, `timeout`, `rollback_on_fail`, `completes_when`, `instruction_to_user`, `on_timeout`, workflow `rollback`) now get an explicit warning
-- **Literal loop payloads**: `on_each_iteration.payload` accepts a literal message (e.g. `"Expand to 50 words."`) in addition to `phase.field` references — previously literals silently resolved to `undefined`
-
+- **`agentflow_status` MCP tool**: poll a running instance for live per-phase progress, loop iterations, execution receipt, and (once finished) phase outputs
 - **Irreversibility gate**: phases marked `irreversible: true` (money, deploys, deletions) never execute without explicit approval. Without it the workflow pauses at the gate (`state: paused`, `gated` event in the receipt) and can be resumed after review: CLI `--approve-irreversible` on `run`/`resume`, MCP `approve_irreversible: true` argument
 - **`agentflow_resume` MCP tool**: resume paused instances (gate or graceful shutdown) directly from the MCP host, with optional `approve_irreversible`
-- `WorkflowRunner.resumeStart()`: non-blocking resume returning the live instance + completion promise
+- **Mock mode for the MCP server**: `AGENTFLOW_MOCK=1` runs workflows with mock executors (no API keys needed); `AGENTFLOW_MOCK_DELAY_MS` simulates slow agents
+- **S11 validation (dangling references)**: references to undefined phases/agents in `input:`, `done when`, `repeat_while`, and ref-shaped loop payloads now fail validation instead of failing silently at runtime; undefined `send_to` agents are errors, undefined `escalate_to` targets are warnings (escalation is log-only today)
+- **S12 validation (honest runtime)**: workflows using parsed-but-not-executed features (`human_action_required`, `streaming_batch`, `poll`, `retry`, `timeout`, `rollback_on_fail`, `completes_when`, `instruction_to_user`, `on_timeout`, workflow `rollback`) now get an explicit warning
 - **S13 validation**: warning when an irreversible phase is inside a loop (one approval covers every iteration)
-- New example `deploy-gate.aflow`: build → review → deploy with the gate on deploy
+- **Literal loop payloads**: `on_each_iteration.payload` accepts a literal message (e.g. `"Expand to 50 words."`) in addition to `phase.field` references — previously literals silently resolved to `undefined`
+- `WorkflowRunner.start()` / `resumeStart()`: non-blocking APIs returning the live instance plus a completion promise (`run()` / `resume()` unchanged)
+- New example `deploy-gate.aflow`: build → review → deploy with the gate on the deploy phase
 
 ### Fixed
 - `custom-domain.aflow` example: `done when` referenced the agent `health_checker` instead of the phase `verify` (caught by S11)
-- **AgentSdkExecutor** (`provider: "agent-sdk"`): run agents through the Claude Agent SDK with subscription authentication. Usage draws from the plan's monthly Agent SDK credit (Pro $20, Max 5x $100, Max 20x $200 — from June 15, 2026) instead of pay-as-you-go API credits. Requires Claude Code logged in (`claude login`) and the optional dependency `@anthropic-ai/claude-agent-sdk`
-- New built-in model alias `claude-plan` → `agent-sdk` / `claude-sonnet-4-5`
-- Safety: the executor unsets `ANTHROPIC_API_KEY` for the process (the SDK would give it precedence, silently billing the API account instead of the subscription credit)
 
 ## [1.0.18] — 2026-06-06
 

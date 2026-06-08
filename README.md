@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@anhonestboy/agentflow)](https://www.npmjs.com/package/@anhonestboy/agentflow)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-92%20passed-brightgreen)](.)
+[![Tests](https://img.shields.io/badge/tests-118%20passed-brightgreen)](.)
 
 ---
 
@@ -37,6 +37,10 @@ workflow code_quality
 | **MCP integration** | Write MCP server code | Automatic — each workflow = MCP tool |
 | **Git-friendly** | Code + config scattered | Single `.aflow` file |
 | **Reviewable** | Need Python knowledge | Readable by anyone |
+| **Safety** | Manual guardrails | `irreversible: true` approval gate |
+| **Transparency** | Custom logging | Execution receipt + tool declaration |
+
+Run workflows on your **Claude subscription credit** (`provider: agent-sdk`) instead of pay-as-you-go API billing, poll long runs over MCP without timeouts, and gate irreversible actions (money, deploys, deletions) behind explicit approval.
 
 ## Quick Start
 
@@ -174,11 +178,12 @@ agentflow init                     # Interactive setup wizard
 agentflow check <file>             # Validate workflow + summary
 agentflow run <file> --input '…'   # Execute with real LLMs
 agentflow run <file> --mock        # Execute with mock agents (no API key needed)
+agentflow run <file> --approve-irreversible   # Authorize irreversible phases
 agentflow compile <file>           # Compile to IR JSON
 agentflow validate <file>          # Validate only (no summary)
 agentflow mcp-config               # Print MCP server config for Claude Code
 agentflow models                   # List configured models + connectivity
-agentflow resume <file> --instance <uuid>  # Resume interrupted workflow
+agentflow resume <file> --instance <uuid>  # Resume a paused/interrupted workflow
 ```
 
 ## Language Reference
