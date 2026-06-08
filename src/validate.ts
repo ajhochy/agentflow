@@ -237,14 +237,14 @@ export function validate(ir: WorkflowIR): ValidationResult {
 
   // S12: features that parse but are not executed by the current runtime — warn loudly
   {
+    // human_action_required and rollback_on_fail ARE executed by the runtime now.
+    const EXECUTED_TYPES = new Set(['standard', 'human_action_required']);
     const IGNORED_PHASE_FEATURES: Array<[string, (p: (typeof phases)[number]) => boolean]> = [
-      ['type (non-standard)', (p) => p.type !== undefined && p.type !== 'standard'],
+      ['type (non-standard)', (p) => p.type !== undefined && !EXECUTED_TYPES.has(p.type)],
       ['poll', (p) => p.poll !== undefined],
       ['retry', (p) => p.retry !== undefined],
       ['timeout', (p) => p.timeout !== undefined],
-      ['rollback_on_fail', (p) => p.rollback_on_fail !== undefined],
       ['completes_when', (p) => p.completes_when !== undefined],
-      ['instruction_to_user', (p) => p.instruction_to_user !== undefined],
       ['on_timeout', (p) => p.on_timeout !== undefined],
     ];
 

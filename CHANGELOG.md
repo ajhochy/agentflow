@@ -4,6 +4,13 @@ All notable changes to AgentFlow DSL will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Human-in-the-loop (real)**: `type: human_action_required` phases now pause the workflow (`state: paused`, phase `awaiting_user`, `instruction_to_user` recorded in the receipt) instead of being silently ignored. Resume with human-provided outputs via `userInputs` (runner) — subsequent phases run with those values
+- **Rollback (real)**: when a phase with `rollback_on_fail.undo: [...]` fails, the runtime re-invokes each completed undo target's agent in **rollback mode** (a directive instructs the agent to reverse, not repeat, the action), marks those phases `rolled_back`, and records the steps in the receipt. All four executors honor the rollback directive
+
+### Changed
+- S12 no longer warns about `human_action_required` / `rollback_on_fail` / `instruction_to_user` (now executed); still warns about `poll`, `retry`, `timeout`, `completes_when`, `on_timeout`, `streaming_batch`, and workflow-level `rollback`
+
 ### Fixed
 - `side_effects.files_written` in the execution receipt no longer lists the same path multiple times when a file is rewritten across loop iterations
 
