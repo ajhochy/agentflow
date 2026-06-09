@@ -4,7 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@anhonestboy/agentflow)](https://www.npmjs.com/package/@anhonestboy/agentflow)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-118%20passed-brightgreen)](.)
+[![Tests](https://img.shields.io/badge/tests-130%20passed-brightgreen)](.)
 
 ---
 
