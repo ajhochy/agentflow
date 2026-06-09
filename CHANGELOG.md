@@ -2,7 +2,7 @@
 
 All notable changes to AgentFlow DSL will be documented in this file.
 
-## [Unreleased]
+## [1.0.20] — 2026-06-08
 
 ### Added
 - **Budget constraints**: a workflow-level `max_cost: <usd>` aborts the workflow (`state: failed`, a `budget` entry in `failed_steps`) once accumulated agent cost exceeds the cap. Cost is tracked in `receipt.total_cost_usd` and reported per-agent via `metrics.cost_usd` (the agent-sdk executor reports real `total_cost_usd`; other executors leave it unset)
