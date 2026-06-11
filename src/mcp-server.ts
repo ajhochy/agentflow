@@ -130,10 +130,14 @@ const RESUME_TOOL = {
   name: 'agentflow_resume',
   description:
     'Resume a paused AgentFlow workflow instance. Workflows pause when they hit a phase ' +
-    'marked irreversible without approval (or after a graceful shutdown). ' +
+    'marked irreversible without approval, a human_action_required phase awaiting human ' +
+    'outputs, or after a graceful shutdown. ' +
     'Pass approve_irreversible: true to explicitly authorize irreversible phases ' +
-    '(money, deploys, deletions). Behaves like a workflow call: returns the result ' +
-    'synchronously if it finishes quickly, otherwise an async handle for agentflow_status.',
+    '(money, deploys, deletions). Pass user_inputs to supply the outputs of a paused ' +
+    'human_action_required phase (e.g. an alignment or manual-smoke gate) so the workflow ' +
+    'can continue without hand-editing the instance state file. Behaves like a workflow ' +
+    'call: returns the result synchronously if it finishes quickly, otherwise an async ' +
+    'handle for agentflow_status.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -144,6 +148,14 @@ const RESUME_TOOL = {
       approve_irreversible: {
         type: 'boolean',
         description: 'Explicitly authorize execution of phases marked irreversible',
+      },
+      user_inputs: {
+        type: 'object',
+        description:
+          'Outputs to supply for paused human_action_required phases, keyed by phase id. ' +
+          "Each value is an object of that phase's declared output fields. Example: " +
+          '{"align": {"alignment_summary": "...", "scope_policy": "...", "branch_strategy": "..."}}',
+        additionalProperties: { type: 'object' },
       },
     },
     required: ['instance_id'],
@@ -206,7 +218,11 @@ async function main() {
 
   // ─── Execution helpers ────────────────────────────────────────────
 
-  function makeRunner(ir: WorkflowIR, approveIrreversible: boolean): WorkflowRunner {
+  function makeRunner(
+    ir: WorkflowIR,
+    approveIrreversible: boolean,
+    userInputs?: Record<string, Record<string, unknown>>,
+  ): WorkflowRunner {
     const outputDir = resolve(`./output/${ir.workflow.id}`);
     const toolRegistry = createBuiltinRegistry(outputDir);
 
@@ -233,7 +249,7 @@ async function main() {
       }
     };
 
-    return new WorkflowRunner(ir, executor, { outputDir, approveIrreversible });
+    return new WorkflowRunner(ir, executor, { outputDir, approveIrreversible, userInputs });
   }
 
   function registerInstance(handle: {
@@ -393,6 +409,25 @@ async function main() {
           if (params.name === 'agentflow_resume') {
             const instanceId = params.arguments?.instance_id as string | undefined;
             const approve = params.arguments?.approve_irreversible === true;
+            const rawUserInputs = params.arguments?.user_inputs;
+            let userInputs: Record<string, Record<string, unknown>> | undefined;
+            if (rawUserInputs !== undefined) {
+              if (
+                typeof rawUserInputs !== 'object' ||
+                rawUserInputs === null ||
+                Array.isArray(rawUserInputs)
+              ) {
+                sendResponse(
+                  makeError(
+                    request.id,
+                    -32602,
+                    'user_inputs must be an object keyed by phase id, each value an object of that phase\'s output fields.',
+                  ),
+                );
+                break;
+              }
+              userInputs = rawUserInputs as Record<string, Record<string, unknown>>;
+            }
             const existing = instanceId ? instances.get(instanceId) : undefined;
             if (!existing) {
               sendResponse(
@@ -427,7 +462,7 @@ async function main() {
               );
               break;
             }
-            const runner = makeRunner(ir, approve);
+            const runner = makeRunner(ir, approve, userInputs);
             const handle = runner.resumeStart(existing.instance.instance_id);
             const entry = registerInstance(handle);
             await waitBriefly(entry);

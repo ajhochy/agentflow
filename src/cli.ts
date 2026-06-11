@@ -341,6 +341,12 @@ program
     '--output-dir <dir>',
     'Directory for phase output files (default: ./output/<workflow-id>)',
   )
+  .option(
+    '--user-inputs <json>',
+    'JSON object supplying outputs for paused human_action_required phases, keyed by ' +
+      'phase id. Example: \'{"align":{"alignment_summary":"...","scope_policy":"...",' +
+      '"branch_strategy":"..."}}\'',
+  )
   .action(
     async (
       file: string,
@@ -349,11 +355,28 @@ program
         mock?: boolean;
         outputDir?: string;
         approveIrreversible?: boolean;
+        userInputs?: string;
       },
     ) => {
       if (!options.instance) {
         console.error(chalk.red('Error: --instance <uuid> is required for resume'));
         process.exit(1);
+      }
+
+      let userInputs: Record<string, Record<string, unknown>> | undefined;
+      if (options.userInputs) {
+        try {
+          const parsed = JSON.parse(options.userInputs);
+          if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+            throw new Error('must be a JSON object keyed by phase id');
+          }
+          userInputs = parsed as Record<string, Record<string, unknown>>;
+        } catch (err) {
+          console.error(
+            chalk.red(`Error: --user-inputs is not valid JSON — ${(err as Error).message}`),
+          );
+          process.exit(1);
+        }
       }
 
       try {
@@ -381,6 +404,7 @@ program
         const runner = new WorkflowRunner(ir, executor, {
           outputDir,
           approveIrreversible: options.approveIrreversible,
+          userInputs,
         });
 
         console.log(chalk.bold(`▶ Resuming: ${ir.workflow.id} — instance ${options.instance}\n`));
