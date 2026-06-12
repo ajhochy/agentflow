@@ -34,6 +34,7 @@ export type AgentDef = {
   model?: string;
   mode: string; // focused, adversarial, reliable, etc.
   tools?: string[];
+  max_turns?: number; // agent-loop turn budget; defaults: 50 with tools, 1 without
   must_produce?: MustProduceItem[];
   output_schema?: JSONSchema; // JSON Schema for output validation
   validation?: ValidationConfig; // retry/abort on validation failure
