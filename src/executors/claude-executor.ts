@@ -4,34 +4,14 @@ import type { AgentExecutor, ExecutionContext } from '../runtime.js';
 import type { ToolRegistry } from '../tools/index.js';
 import { withRetry } from '../retry.js';
 import { logger } from '../logger.js';
+import { shouldRouteThroughHeadroom } from './headroom-routing.js';
+
+// Re-exported for backwards compatibility with existing importers/tests.
+export { HEADROOM_EXCLUDED_MODES, shouldRouteThroughHeadroom } from './headroom-routing.js';
 
 type MessageParam = Anthropic.MessageParam;
 type ContentBlock = Anthropic.ContentBlock;
 type ToolParam = Anthropic.Tool;
-
-/**
- * Agent modes whose context must NEVER be routed through a lossy compression
- * proxy. These agents are evidence-critical: the verifier (`adversarial`) lives
- * by "evidence before assertions — stale evidence is not evidence", and the
- * contract writer (`strict`) emits a precise JSON schema. Compressing their
- * inputs risks a false verdict or a broken contract, so they always talk to
- * Anthropic directly. Exploration/implementation agents (focused, reliable,
- * objective, patient) tolerate lossy tool-output compression.
- */
-export const HEADROOM_EXCLUDED_MODES = new Set(['adversarial', 'strict', 'precise']);
-
-/**
- * Decide whether this agent's API traffic may be routed through the Headroom
- * compression proxy. Compression is opt-in (a proxy URL must be configured) and
- * is hard-blocked for evidence-critical modes regardless of configuration.
- */
-export function shouldRouteThroughHeadroom(
-  agent: Pick<AgentDef, 'mode'>,
-  proxyUrl?: string,
-): boolean {
-  if (!proxyUrl) return false;
-  return !HEADROOM_EXCLUDED_MODES.has(agent.mode);
-}
 
 /** Minimal client surface ClaudeExecutor depends on — injectable for tests. */
 export type AnthropicLike = Pick<Anthropic, 'messages'>;
