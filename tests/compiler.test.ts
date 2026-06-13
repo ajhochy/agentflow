@@ -116,6 +116,20 @@ describe('Compiler', () => {
     expect(ir.workflow.agents['writer_agent'].has_side_effects).toBe(true);
   });
 
+  test('compila agente con max_turns', () => {
+    const source = `workflow test
+  agents:
+    agent implementer
+      mode: focused
+      tools: [file_read, file_edit, shell_exec]
+      max_turns: 60
+    agent summarizer
+      mode: focused`;
+    const ir = compileSource(source);
+    expect(ir.workflow.agents['implementer'].max_turns).toBe(60);
+    expect(ir.workflow.agents['summarizer'].max_turns).toBeUndefined();
+  });
+
   test('compila loop', () => {
     const source = `workflow test
   loop quality_gate

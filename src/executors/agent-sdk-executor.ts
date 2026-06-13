@@ -22,6 +22,14 @@ export type AgentSdkQueryFn = (params: {
 }) => AsyncIterable<SdkResultMessage>;
 
 /**
+ * Default turn budget for tool-using agents when the .aflow agent block has no
+ * explicit `max_turns`. Implementer-style agents routinely need dozens of turns
+ * (read context docs, edit several files, run tests), so this errs high; the
+ * SDK stops at the result message, so unused budget costs nothing.
+ */
+export const DEFAULT_MAX_TURNS_WITH_TOOLS = 50;
+
+/**
  * Executor backed by the Claude Agent SDK (@anthropic-ai/claude-agent-sdk).
  *
  * Unlike ClaudeExecutor (Anthropic SDK + ANTHROPIC_API_KEY, pay-as-you-go),
@@ -61,9 +69,12 @@ export class AgentSdkExecutor implements AgentExecutor {
     const query = await this.loadQueryFn(agent.id);
     const system = this.buildSystemPrompt(agent, context);
     const prompt = this.buildUserPrompt(agent, input);
+    const allowedTools = this.resolveTools(agent.tools);
+    const maxTurns =
+      agent.max_turns ?? (allowedTools.length > 0 ? DEFAULT_MAX_TURNS_WITH_TOOLS : 1);
 
     const message = await withRetry(
-      () => this.runQuery(query, prompt, system),
+      () => this.runQuery(query, prompt, system, allowedTools, maxTurns),
       `${agent.id}/agent-sdk`,
     );
 
@@ -100,18 +111,30 @@ export class AgentSdkExecutor implements AgentExecutor {
     }
   }
 
+  private resolveTools(tools?: string[]): string[] {
+    const TOOL_MAP: Record<string, string> = {
+      file_read: 'Read',
+      file_write: 'Write',
+      file_edit: 'Edit',
+      shell_exec: 'Bash',
+    };
+    return (tools ?? []).map((t) => TOOL_MAP[t] ?? t);
+  }
+
   private async runQuery(
     query: AgentSdkQueryFn,
     prompt: string,
     system: string,
+    allowedTools: string[] = [],
+    maxTurns: number = 1,
   ): Promise<SdkResultMessage> {
     const iterator = query({
       prompt,
       options: {
         model: this.model,
         systemPrompt: system,
-        maxTurns: 1,
-        allowedTools: [],
+        maxTurns,
+        allowedTools,
         permissionMode: 'default',
       },
     });
@@ -128,10 +151,14 @@ export class AgentSdkExecutor implements AgentExecutor {
   private buildUserPrompt(agent: AgentDef, input: Record<string, unknown>): string {
     const fields = agent.must_produce ?? [];
     const fieldList = fields.map((i) => `"${i.name}": "<${i.type ?? 'string'}>"`).join(',\n  ');
+    const hasTools = (agent.tools ?? []).length > 0;
+    const closing = hasTools
+      ? `Use your tools to complete the task. When finished, your final message must be EXACTLY this JSON and nothing else:\n{\n  ${fieldList}\n}`
+      : `IMPORTANT: respond with valid JSON only. No additional text outside the JSON.\n{\n  ${fieldList}\n}`;
     return (
       `Input:\n${JSON.stringify(input, null, 2)}\n\n` +
       `You must produce EXACTLY these JSON fields, no more, no less:\n{\n  ${fieldList}\n}\n\n` +
-      `IMPORTANT: respond with valid JSON only. No additional text outside the JSON.`
+      closing
     );
   }
 

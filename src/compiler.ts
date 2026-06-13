@@ -175,6 +175,7 @@ function compileAgent(ast: ASTAgent): AgentDef {
     model: getString(props, 'model'),
     mode: getString(props, 'mode') ?? 'focused',
     tools,
+    max_turns: getNumber(props, 'max_turns'),
     must_produce: mustProduceList.length > 0 ? mustProduceList : undefined,
     output_schema: compileOutputSchema(props),
     validation: compileValidation(props),

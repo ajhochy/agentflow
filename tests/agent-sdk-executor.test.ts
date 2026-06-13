@@ -1,4 +1,7 @@
-import { AgentSdkExecutor } from '../src/executors/agent-sdk-executor.js';
+import {
+  AgentSdkExecutor,
+  DEFAULT_MAX_TURNS_WITH_TOOLS,
+} from '../src/executors/agent-sdk-executor.js';
 import type { AgentSdkQueryFn } from '../src/executors/agent-sdk-executor.js';
 import type { AgentDef } from '../src/types.js';
 
@@ -25,6 +28,17 @@ function mockQuery(resultText: string, extras: Record<string, unknown> = {}): Ag
       num_turns: 1,
       usage: { input_tokens: 100, output_tokens: 50 },
       ...extras,
+    };
+  };
+}
+
+function capturingQuery(captured: { options?: Record<string, unknown> }): AgentSdkQueryFn {
+  return async function* (params) {
+    captured.options = params.options;
+    yield {
+      type: 'result',
+      subtype: 'success',
+      result: '{"verdict": "approved", "confidence": 1, "suggestions": "none"}',
     };
   };
 }
@@ -73,6 +87,36 @@ describe('AgentSdkExecutor', () => {
   it('throws a clear error on unparseable output', async () => {
     const exec = new AgentSdkExecutor('claude-sonnet-4-5', mockQuery('not json at all'));
     await expect(exec.execute(AGENT, {})).rejects.toThrow(/unparseable JSON/);
+  });
+
+  it('runs tool-less agents with maxTurns 1 and no tools', async () => {
+    const captured: { options?: Record<string, unknown> } = {};
+    const exec = new AgentSdkExecutor('claude-sonnet-4-5', capturingQuery(captured));
+    await exec.execute(AGENT, {});
+    expect(captured.options?.maxTurns).toBe(1);
+    expect(captured.options?.allowedTools).toEqual([]);
+  });
+
+  it('defaults tool-using agents to DEFAULT_MAX_TURNS_WITH_TOOLS and maps tool names', async () => {
+    const captured: { options?: Record<string, unknown> } = {};
+    const exec = new AgentSdkExecutor('claude-sonnet-4-5', capturingQuery(captured));
+    const agent: AgentDef = { ...AGENT, tools: ['file_read', 'shell_exec', 'Glob'] };
+    await exec.execute(agent, {});
+    expect(captured.options?.maxTurns).toBe(DEFAULT_MAX_TURNS_WITH_TOOLS);
+    expect(DEFAULT_MAX_TURNS_WITH_TOOLS).toBeGreaterThanOrEqual(50);
+    expect(captured.options?.allowedTools).toEqual(['Read', 'Bash', 'Glob']);
+  });
+
+  it('honors an explicit max_turns over the defaults', async () => {
+    const captured: { options?: Record<string, unknown> } = {};
+    const exec = new AgentSdkExecutor('claude-sonnet-4-5', capturingQuery(captured));
+    const agent: AgentDef = { ...AGENT, tools: ['file_edit'], max_turns: 60 };
+    await exec.execute(agent, {});
+    expect(captured.options?.maxTurns).toBe(60);
+
+    const toolLess: AgentDef = { ...AGENT, max_turns: 3 };
+    await exec.execute(toolLess, {});
+    expect(captured.options?.maxTurns).toBe(3);
   });
 
   it('unsets ANTHROPIC_API_KEY so subscription auth is used', async () => {
