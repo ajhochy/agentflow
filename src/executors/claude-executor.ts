@@ -4,18 +4,40 @@ import type { AgentExecutor, ExecutionContext } from '../runtime.js';
 import type { ToolRegistry } from '../tools/index.js';
 import { withRetry } from '../retry.js';
 import { logger } from '../logger.js';
+import { shouldRouteThroughHeadroom } from './headroom-routing.js';
+
+// Re-exported for backwards compatibility with existing importers/tests.
+export { HEADROOM_EXCLUDED_MODES, shouldRouteThroughHeadroom } from './headroom-routing.js';
 
 type MessageParam = Anthropic.MessageParam;
 type ContentBlock = Anthropic.ContentBlock;
 type ToolParam = Anthropic.Tool;
 
+/** Minimal client surface ClaudeExecutor depends on — injectable for tests. */
+export type AnthropicLike = Pick<Anthropic, 'messages'>;
+export type AnthropicFactory = (opts: { baseURL?: string }) => AnthropicLike;
+
 export type ClaudeExecutorOptions = {
   toolRegistry?: ToolRegistry;
   maxToolRounds?: number;
+  /** Headroom proxy base URL; defaults to process.env.HEADROOM_PROXY_URL. */
+  headroomProxyUrl?: string;
+  /** Override Anthropic client construction (tests inject a fake here). */
+  clientFactory?: AnthropicFactory;
 };
 
+function isConnectionError(err: unknown): boolean {
+  if (err instanceof Anthropic.APIConnectionError) return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /ECONNREFUSED|fetch failed|connect|socket hang up|network/i.test(msg);
+}
+
 export class ClaudeExecutor implements AgentExecutor {
-  private client: Anthropic;
+  private directClient: AnthropicLike;
+  private proxyClient?: AnthropicLike;
+  private proxyUrl?: string;
+  /** Set when the proxy proves unreachable mid-run; future calls go direct. */
+  private proxyDegraded = false;
   private toolRegistry?: ToolRegistry;
   private maxToolRounds: number;
 
@@ -23,10 +45,23 @@ export class ClaudeExecutor implements AgentExecutor {
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY is not set');
     }
-    this.client = new Anthropic();
+    const factory: AnthropicFactory = options?.clientFactory ?? ((opts) => new Anthropic(opts));
+    this.directClient = factory({});
+    this.proxyUrl = options?.headroomProxyUrl ?? process.env.HEADROOM_PROXY_URL;
+    this.proxyClient = this.proxyUrl ? factory({ baseURL: this.proxyUrl }) : undefined;
     this.toolRegistry = options?.toolRegistry;
     this.maxToolRounds =
       options?.maxToolRounds ?? (Number(process.env.AGENTFLOW_MAX_TOOL_ROUNDS) || 10);
+  }
+
+  /**
+   * Pick the client for this agent. Eligible agents use the proxy; everything
+   * else (and any agent once the proxy has proven unreachable) goes direct.
+   */
+  private clientFor(agent: AgentDef): { client: AnthropicLike; viaProxy: boolean } {
+    if (this.proxyDegraded) return { client: this.directClient, viaProxy: false };
+    const viaProxy = Boolean(shouldRouteThroughHeadroom(agent, this.proxyUrl) && this.proxyClient);
+    return { client: viaProxy ? (this.proxyClient as AnthropicLike) : this.directClient, viaProxy };
   }
 
   async execute(
@@ -59,19 +94,25 @@ export class ClaudeExecutor implements AgentExecutor {
     const hasRealTools = agentTools.length > 0;
     let totalToolCalls = 0;
 
+    if (this.clientFor(agent).viaProxy) {
+      logger.info(
+        `[${agent.id}] routing Anthropic traffic through Headroom proxy (${this.proxyUrl})`,
+      );
+    }
+
     for (let round = 0; round < this.maxToolRounds; round++) {
       logger.debug(`[${agent.id}] Tool round ${round + 1}/${this.maxToolRounds}`);
-      const response = await withRetry(
-        () =>
-          this.client.messages.create({
-            model: agent.model ?? 'claude-opus-4-5',
-            max_tokens: 8096,
-            system,
-            messages,
-            tools: claudeTools,
-            tool_choice:
-              hasRealTools && round === 0 ? { type: 'auto' as const } : { type: 'any' as const },
-          }),
+      const response = await this.createMessage(
+        agent,
+        {
+          model: agent.model ?? 'claude-opus-4-5',
+          max_tokens: 8096,
+          system,
+          messages,
+          tools: claudeTools,
+          tool_choice:
+            hasRealTools && round === 0 ? { type: 'auto' as const } : { type: 'any' as const },
+        },
         `${agent.id}/claude-api`,
       );
 
@@ -137,6 +178,39 @@ export class ClaudeExecutor implements AgentExecutor {
     throw new Error(
       `[${agent.id}] Max tool rounds (${this.maxToolRounds}) exceeded without produce_output`,
     );
+  }
+
+  /**
+   * Send one message-create, routing through the Headroom proxy for eligible
+   * agents. If the proxy is unreachable, fail safe: warn, mark the proxy
+   * degraded for the rest of the run, and retry the same request directly.
+   */
+  private async createMessage(
+    agent: AgentDef,
+    params: Anthropic.MessageCreateParamsNonStreaming,
+    label: string,
+  ): Promise<Anthropic.Message> {
+    const { client, viaProxy } = this.clientFor(agent);
+    try {
+      // The proxy attempt fails fast (no retry/backoff): if it is unreachable
+      // we have our own direct fallback below, so there is no point burning
+      // exponential-backoff sleeps on a dead local proxy.
+      return await withRetry(
+        () => client.messages.create(params),
+        label,
+        viaProxy ? { maxRetries: 0 } : undefined,
+      );
+    } catch (err) {
+      if (viaProxy && isConnectionError(err)) {
+        logger.warn(
+          `[${agent.id}] Headroom proxy unreachable (${this.proxyUrl}); ` +
+            `falling back to direct Anthropic for the rest of this run`,
+        );
+        this.proxyDegraded = true;
+        return await withRetry(() => this.directClient.messages.create(params), label);
+      }
+      throw err;
+    }
   }
 
   private buildSystemPrompt(agent: AgentDef, context?: ExecutionContext): string {

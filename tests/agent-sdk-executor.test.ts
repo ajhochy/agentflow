@@ -129,3 +129,41 @@ describe('AgentSdkExecutor', () => {
     expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
   });
 });
+
+describe('AgentSdkExecutor Headroom routing (subscription path)', () => {
+  const PROXY = 'http://localhost:8787';
+  const FOCUSED: AgentDef = { ...AGENT, mode: 'focused' };
+
+  it('redirects an eligible agent to the proxy via options.env', async () => {
+    const captured: { options?: Record<string, unknown> } = {};
+    const exec = new AgentSdkExecutor('claude-sonnet-4-5', capturingQuery(captured), PROXY);
+    await exec.execute(FOCUSED, {});
+    const env = captured.options?.env as Record<string, string> | undefined;
+    expect(env?.ANTHROPIC_BASE_URL).toBe(PROXY);
+  });
+
+  it('preserves process.env (spread) so subscription login survives', async () => {
+    process.env.HEADROOM_TEST_SENTINEL = 'keepme';
+    const captured: { options?: Record<string, unknown> } = {};
+    const exec = new AgentSdkExecutor('claude-sonnet-4-5', capturingQuery(captured), PROXY);
+    await exec.execute(FOCUSED, {});
+    const env = captured.options?.env as Record<string, string> | undefined;
+    expect(env?.HEADROOM_TEST_SENTINEL).toBe('keepme');
+    expect(env?.ANTHROPIC_API_KEY).toBeUndefined(); // never reintroduced
+    delete process.env.HEADROOM_TEST_SENTINEL;
+  });
+
+  it('never routes the verifier (adversarial) — no env override', async () => {
+    const captured: { options?: Record<string, unknown> } = {};
+    const exec = new AgentSdkExecutor('claude-sonnet-4-5', capturingQuery(captured), PROXY);
+    await exec.execute(AGENT, {}); // AGENT.mode === 'adversarial'
+    expect(captured.options?.env).toBeUndefined();
+  });
+
+  it('does not set env when no proxy is configured', async () => {
+    const captured: { options?: Record<string, unknown> } = {};
+    const exec = new AgentSdkExecutor('claude-sonnet-4-5', capturingQuery(captured), undefined);
+    await exec.execute(FOCUSED, {});
+    expect(captured.options?.env).toBeUndefined();
+  });
+});

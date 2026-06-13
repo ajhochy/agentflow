@@ -2,6 +2,7 @@ import type { AgentDef, ExecutionMetrics } from '../types.js';
 import type { AgentExecutor, ExecutionContext } from '../runtime.js';
 import { withRetry } from '../retry.js';
 import { logger } from '../logger.js';
+import { shouldRouteThroughHeadroom, headroomProxyUrl } from './headroom-routing.js';
 
 /**
  * Minimal shape of the Agent SDK `query()` result messages we consume.
@@ -44,10 +45,12 @@ export const DEFAULT_MAX_TURNS_WITH_TOOLS = 50;
 export class AgentSdkExecutor implements AgentExecutor {
   private model: string;
   private queryFn?: AgentSdkQueryFn;
+  private proxyUrl?: string;
 
-  constructor(model: string, queryFn?: AgentSdkQueryFn) {
+  constructor(model: string, queryFn?: AgentSdkQueryFn, proxyUrl?: string) {
     this.model = model;
     this.queryFn = queryFn;
+    this.proxyUrl = headroomProxyUrl(proxyUrl);
   }
 
   async execute(
@@ -73,8 +76,16 @@ export class AgentSdkExecutor implements AgentExecutor {
     const maxTurns =
       agent.max_turns ?? (allowedTools.length > 0 ? DEFAULT_MAX_TURNS_WITH_TOOLS : 1);
 
+    // Route eligible agents' subscription traffic through the Headroom proxy.
+    // Evidence-critical modes (verifier/contract-writer) are excluded by the
+    // shared denylist and always reach Anthropic directly.
+    const proxyUrl = shouldRouteThroughHeadroom(agent, this.proxyUrl) ? this.proxyUrl : undefined;
+    if (proxyUrl) {
+      logger.info(`[${agent.id}] routing Agent SDK traffic through Headroom proxy (${proxyUrl})`);
+    }
+
     const message = await withRetry(
-      () => this.runQuery(query, prompt, system, allowedTools, maxTurns),
+      () => this.runQuery(query, prompt, system, allowedTools, maxTurns, proxyUrl),
       `${agent.id}/agent-sdk`,
     );
 
@@ -127,17 +138,23 @@ export class AgentSdkExecutor implements AgentExecutor {
     system: string,
     allowedTools: string[] = [],
     maxTurns: number = 1,
+    proxyUrl?: string,
   ): Promise<SdkResultMessage> {
-    const iterator = query({
-      prompt,
-      options: {
-        model: this.model,
-        systemPrompt: system,
-        maxTurns,
-        allowedTools,
-        permissionMode: 'default',
-      },
-    });
+    const options: Record<string, unknown> = {
+      model: this.model,
+      systemPrompt: system,
+      maxTurns,
+      allowedTools,
+      permissionMode: 'default',
+    };
+    // The SDK does NOT merge `env` with process.env — it replaces it. Spread
+    // process.env so the spawned Claude Code subprocess keeps its login/OAuth
+    // (subscription) credentials and PATH; only add the proxy redirect on top.
+    // ANTHROPIC_API_KEY was already deleted above, so this stays subscription-auth.
+    if (proxyUrl) {
+      options.env = { ...process.env, ANTHROPIC_BASE_URL: proxyUrl };
+    }
+    const iterator = query({ prompt, options });
 
     for await (const message of iterator) {
       if (message.type === 'result') {
