@@ -1,3 +1,7 @@
+---
+type: project
+---
+
 # Current Plan — agentflow
 
 ## Active plan

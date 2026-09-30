@@ -1,3 +1,7 @@
+---
+type: project
+---
+
 # Repo Map — agentflow
 
 ## Key directories
